@@ -1,0 +1,333 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 02 · Etiquetado por reglas: intención, categoría y urgencia\n",
+    "\n",
+    "**Objetivo:** asignar a cada tweet de **cliente** tres etiquetas usando diccionarios de palabras, y preparar una muestra para que tú la etiquetes a mano y poder medir qué tan buenas son las reglas.\n",
+    "\n",
+    "**Importante para entender el flujo (son dos archivos distintos con propósitos distintos):**\n",
+    "\n",
+    "| Archivo | Para qué sirve |\n",
+    "|---|---|\n",
+    "| `clientes_etiquetados.csv` | **Todos** los tweets con la etiqueta automática de las reglas. |\n",
+    "| `muestra_para_etiquetar.csv` | Una muestra pequeña **sin** etiquetas automáticas, para que tú pongas la etiqueta \"verdadera\" a mano. |\n",
+    "| `muestra_clave_reglas.csv` | La misma muestra **con** la etiqueta automática; se usa solo después, para comparar. |\n",
+    "\n",
+    "**Cómo se eligen las categorías:** el código **no las descubre**: las definí yo como propuesta inicial en el diccionario `CATEGORIAS` (hardware, iOS, cuenta, apps, pagos, servicios, conectividad). Si un tweet no coincide con ninguna, queda en `otros`. En la sección 4 verás cómo comprobar si te faltan categorías."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 1. Importaciones y rutas"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import re\n",
+    "from collections import Counter\n",
+    "from pathlib import Path\n",
+    "import pandas as pd\n",
+    "\n",
+    "IN = Path(\"../data/processed/apple_support_filtrado.csv\")\n",
+    "OUT = Path(\"../data/processed/clientes_etiquetados.csv\")\n",
+    "MUESTRA = Path(\"../data/processed/muestra_para_etiquetar.csv\")\n",
+    "CLAVE = Path(\"../data/processed/muestra_clave_reglas.csv\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 2. Diccionarios de palabras\n",
+    "Cada diccionario es una lista de expresiones regulares. La función `rx` las une en una sola búsqueda que ignora mayúsculas y exige que la palabra **empiece** en un límite de palabra (`\\b`), de modo que `crash` también detecta `crashes` pero `bug` no se activa dentro de otra palabra.\n",
+    "\n",
+    "- **FALLA / SOLICITUD:** distinguen si el cliente reporta un problema o pide información.\n",
+    "- **CATEGORIAS:** el tema técnico. Es el diccionario que debes ampliar o editar.\n",
+    "- **CRITICA / MEDIA / AMPLIFICADORES:** definen el nivel de urgencia (ver abajo).\n",
+    "\n",
+    "**Definición de urgencia (solo para fallas):**\n",
+    "- **Crítica:** pérdida total de servicio, acceso, datos, dinero o seguridad; o una falla media con apremio, duración o alcance (*still*, *for days*, *everyone*).\n",
+    "- **Media:** función degradada o parcial.\n",
+    "- **Baja:** solicitudes, dudas o fallas cosméticas."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def rx(palabras):\n",
+    "    return re.compile(r\"\\b(?:\" + \"|\".join(palabras) + r\")\", re.IGNORECASE)\n",
+    "\n",
+    "FALLA = rx([\n",
+    "    r\"not working\", r\"doesn'?t work\", r\"don'?t work\", r\"stopped working\",\n",
+    "    r\"won'?t\", r\"can'?t\", r\"cannot\", r\"unable\", r\"broken\", r\"crash\", r\"bug\",\n",
+    "    r\"error\", r\"stuck\", r\"freez\", r\"frozen\", r\"glitch\", r\"issue\", r\"problem\",\n",
+    "    r\"fail\", r\"down\\b\", r\"outage\", r\"slow\", r\"drain\", r\"lost\", r\"missing\",\n",
+    "    r\"disappear\", r\"black screen\", r\"reboot\", r\"restart\", r\"keeps\",\n",
+    "])\n",
+    "SOLICITUD = rx([\n",
+    "    r\"how (?:do|can|to|does)\", r\"where (?:do|can|is)\", r\"what (?:is|does|are)\",\n",
+    "    r\"when (?:will|is|does)\", r\"is there (?:a|any)\", r\"does (?:anyone|apple)\",\n",
+    "    r\"can i\", r\"could you\", r\"any (?:way|idea|tips?)\", r\"please (?:help|advise)\",\n",
+    "    r\"how much\", r\"which\",\n",
+    "])\n",
+    "\n",
+    "CATEGORIAS = {\n",
+    "    \"hardware_dispositivo\": rx([r\"battery\", r\"screen\", r\"charg\", r\"iphone\", r\"ipad\",\n",
+    "                                r\"macbook\", r\"mac\\b\", r\"airpods\", r\"watch\", r\"camera\",\n",
+    "                                r\"speaker\", r\"button\", r\"cracked\"]),\n",
+    "    \"ios_software_actualizacion\": rx([r\"ios\", r\"update\", r\"upgrade\", r\"macos\", r\"beta\",\n",
+    "                                      r\"install\", r\"os\\b\", r\"firmware\", r\"keyboard\"]),\n",
+    "    \"cuenta_icloud\": rx([r\"icloud\", r\"apple id\", r\"password\", r\"log ?in\", r\"sign ?in\",\n",
+    "                         r\"locked\", r\"verification\", r\"2fa\", r\"backup\", r\"storage\"]),\n",
+    "    \"apps_appstore\": rx([r\"app store\", r\"\\bapps?\\b\", r\"download\", r\"testflight\",\n",
+    "                         r\"safari\", r\"mail app\"]),\n",
+    "    \"pagos_facturacion\": rx([r\"charge\", r\"billing\", r\"refund\", r\"payment\", r\"subscription\",\n",
+    "                             r\"invoice\", r\"apple pay\", r\"credit card\", r\"purchase\"]),\n",
+    "    \"servicios_apple\": rx([r\"apple music\", r\"imessage\", r\"facetime\", r\"siri\", r\"icloud mail\",\n",
+    "                           r\"apple tv\", r\"podcast\", r\"maps\", r\"itunes\"]),\n",
+    "    \"conectividad\": rx([r\"wi-?fi\", r\"bluetooth\", r\"cellular\", r\"signal\", r\"network\",\n",
+    "                        r\"data\\b\", r\"sim\\b\", r\"carrier\", r\"roaming\"]),\n",
+    "}\n",
+    "\n",
+    "CRITICA = rx([\n",
+    "    r\"outage\", r\"down for\", r\"\\bis down\\b\", r\"services? (?:is |are )?down\",\n",
+    "    r\"completely (?:dead|broken|unusable)\", r\"bricked\", r\"won'?t (?:turn on|boot|start)\",\n",
+    "    r\"boot ?loop\", r\"stuck on (?:apple )?logo\", r\"data loss\", r\"lost (?:all|everything)\",\n",
+    "    r\"all my (?:photos|data|contacts)\", r\"hacked\", r\"unauthori[sz]ed\", r\"stolen\",\n",
+    "    r\"fraud\", r\"locked out\", r\"can'?t (?:log ?in|sign ?in|access)\",\n",
+    "    r\"charged (?:twice|\\d+)\", r\"disabled\", r\"can'?t (?:make|receive) calls?\", r\"911|emergency\",\n",
+    "])\n",
+    "MEDIA = rx([\n",
+    "    r\"not working\", r\"doesn'?t work\", r\"stopped working\", r\"crash\", r\"freez\",\n",
+    "    r\"frozen\", r\"error\", r\"bug\", r\"glitch\", r\"stuck\", r\"slow\", r\"drain\",\n",
+    "    r\"won'?t (?:update|install|download|connect|sync)\", r\"keeps\", r\"missing\",\n",
+    "    r\"fail\", r\"can'?t\",\n",
+    "])\n",
+    "AMPLIFICADORES = rx([\n",
+    "    r\"urgent\", r\"asap\", r\"immediately\", r\"\\bstill\\b\", r\"for (?:days|hours|weeks)\",\n",
+    "    r\"since (?:yesterday|monday|this morning|last)\", r\"everyone\", r\"anyone else\",\n",
+    "    r\"all (?:users|of us)\", r\"again and again\", r\"work(?:ing)? from\", r\"business\",\n",
+    "])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 3. Funciones de clasificación\n",
+    "Cada función recibe el texto de un tweet y devuelve una etiqueta:\n",
+    "\n",
+    "- `intencion`: si hay palabra de falla → `falla`; si no, y hay patrón de pregunta o \"?\" → `solicitud`; si nada coincide → `otro`. (La falla tiene prioridad: \"my phone won't charge, how do I fix it?\" es una falla.)\n",
+    "- `categoria`: cuenta cuántas palabras de cada categoría aparecen y elige la que más tiene. Si ninguna coincide → `otros`. Si hay empate gana la primera del diccionario.\n",
+    "- `urgencia`: solicitudes → baja; falla con término crítico → crítica; falla con término medio → media (sube a crítica si hay amplificador); falla sin más → baja."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def intencion(t):\n",
+    "    if FALLA.search(t):\n",
+    "        return \"falla\"\n",
+    "    if SOLICITUD.search(t) or \"?\" in t:\n",
+    "        return \"solicitud\"\n",
+    "    return \"otro\"\n",
+    "\n",
+    "def categoria(t):\n",
+    "    puntos = {c: len(r.findall(t)) for c, r in CATEGORIAS.items()}\n",
+    "    mejor = max(puntos, key=puntos.get)\n",
+    "    return mejor if puntos[mejor] > 0 else \"otros\"\n",
+    "\n",
+    "def urgencia(t, intent):\n",
+    "    if intent != \"falla\":\n",
+    "        return \"baja\"\n",
+    "    if CRITICA.search(t):\n",
+    "        return \"critica\"\n",
+    "    if MEDIA.search(t):\n",
+    "        return \"critica\" if AMPLIFICADORES.search(t) else \"media\"\n",
+    "    return \"baja\""
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 4. Aplicar las reglas a todos los tweets de clientes\n",
+    "Se carga el CSV del notebook 01, se filtran solo los clientes y se agregan tres columnas nuevas. El resultado completo se guarda en `clientes_etiquetados.csv`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "df = pd.read_csv(IN)\n",
+    "cl = df[df[\"rol\"] == \"cliente\"].copy()\n",
+    "t = cl[\"texto_limpio\"].fillna(\"\")\n",
+    "\n",
+    "cl[\"intencion\"] = t.apply(intencion)\n",
+    "cl[\"categoria\"] = t.apply(categoria)\n",
+    "cl[\"urgencia\"] = [urgencia(x, i) for x, i in zip(t, cl[\"intencion\"])]\n",
+    "cl.to_csv(OUT, index=False)\n",
+    "cl[[\"texto_limpio\", \"intencion\", \"categoria\", \"urgencia\"]].sample(10, random_state=1)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 5. Distribuciones (tablas para Resultados)\n",
+    "Muestran cuántos tweets cayeron en cada etiqueta. Si `otros` o `otro` es muy grande, las reglas no están cubriendo bien los datos."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(cl[\"intencion\"].value_counts(normalize=True).round(3), \"\\n\")\n",
+    "print(cl.loc[cl[\"intencion\"] == \"falla\", \"urgencia\"].value_counts(normalize=True).round(3), \"\\n\")\n",
+    "pd.crosstab(cl[\"categoria\"], cl[\"urgencia\"])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 6. ¿Las categorías están completas? Cómo comprobarlo\n",
+    "Las categorías son una hipótesis tuya, y los datos pueden contradecirla. Dos revisiones:\n",
+    "\n",
+    "1. **Cobertura:** qué porcentaje de las fallas quedó en `otros`. Como referencia práctica, conviene que sea bajo (por ejemplo < 15-20 %); si es alto, faltan palabras o categorías.\n",
+    "2. **Palabras frecuentes en `otros`:** si aparece una palabra repetida (por ejemplo `homepod`, `carplay`), probablemente merece su categoría o entrar a una existente."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fallas = cl[cl[\"intencion\"] == \"falla\"]\n",
+    "print(f\"Fallas en 'otros': {(fallas['categoria'] == 'otros').mean():.1%}\")\n",
+    "\n",
+    "from sklearn.feature_extraction.text import CountVectorizer\n",
+    "otros = fallas.loc[fallas[\"categoria\"] == \"otros\", \"texto_limpio\"]\n",
+    "vec = CountVectorizer(stop_words=\"english\", ngram_range=(1, 2), min_df=5)\n",
+    "conteos = vec.fit_transform(otros).sum(axis=0).A1\n",
+    "top = sorted(zip(vec.get_feature_names_out(), conteos), key=lambda x: -x[1])[:40]\n",
+    "pd.DataFrame(top, columns=[\"termino\", \"frecuencia\"])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 7. Ver ejemplos de cada etiqueta\n",
+    "Antes de etiquetar a mano, lee ejemplos por urgencia para decidir si las definiciones tienen sentido. Cambia el valor de `nivel` para ver los otros."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "nivel = \"critica\"   # prueba: \"media\", \"baja\"\n",
+    "pd.set_option(\"display.max_colwidth\", 200)\n",
+    "cl.loc[cl[\"urgencia\"] == nivel, [\"texto_limpio\", \"categoria\"]].sample(15, random_state=3)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 8. Muestra para etiquetado manual (a ciegas)\n",
+    "Se toma una muestra estratificada (hasta 40 tweets por combinación intención × urgencia, para que haya ejemplos de los casos raros como los críticos).\n",
+    "\n",
+    "Se generan **dos** archivos:\n",
+    "- `muestra_para_etiquetar.csv`: solo `tweet_id`, texto y columnas vacías `*_manual`. **No incluye la etiqueta de las reglas**, para que no te influya al etiquetar.\n",
+    "- `muestra_clave_reglas.csv`: los mismos tweets con la etiqueta automática, que se usa en el paso 9.\n",
+    "\n",
+    "En `comentario_error` anota por qué un tweet es difícil o ambiguo; esos comentarios alimentan tu subsección de errores y aciertos."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "muestra = (cl.sample(frac=1, random_state=42)          # mezcla\n",
+    "             .groupby([\"intencion\", \"urgencia\"])\n",
+    "             .head(40))                                 # 40 por combinación\n",
+    "\n",
+    "para_etiquetar = muestra[[\"tweet_id\", \"texto_limpio\"]].copy()\n",
+    "for c in [\"intencion_manual\", \"categoria_manual\", \"urgencia_manual\", \"comentario_error\"]:\n",
+    "    para_etiquetar[c] = \"\"\n",
+    "\n",
+    "para_etiquetar.to_csv(MUESTRA, index=False)\n",
+    "muestra[[\"tweet_id\", \"intencion\", \"categoria\", \"urgencia\"]].to_csv(CLAVE, index=False)\n",
+    "print(len(muestra), \"tweets en la muestra\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 9. Evaluación contra tu etiquetado manual (hacer después de etiquetar)\n",
+    "Cuando termines de llenar `muestra_para_etiquetar.csv` (guárdalo como CSV), esta celda compara tus etiquetas con las de las reglas y calcula precisión, sensibilidad y **F1** por clase. Es la métrica de tu hipótesis (≥ 80 %).\n",
+    "\n",
+    "Valores válidos al etiquetar: intención `falla`/`solicitud`/`otro`; urgencia `baja`/`media`/`critica`; categoría, los nombres del diccionario u `otros`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from sklearn.metrics import classification_report\n",
+    "\n",
+    "manual = pd.read_csv(MUESTRA, dtype={\"tweet_id\": str})\n",
+    "clave = pd.read_csv(CLAVE, dtype={\"tweet_id\": str})\n",
+    "m = manual.merge(clave, on=\"tweet_id\")\n",
+    "m = m[m[\"intencion_manual\"].notna() & (m[\"intencion_manual\"] != \"\")]\n",
+    "\n",
+    "if m.empty:\n",
+    "    print(\"Aún no hay etiquetas manuales.\")\n",
+    "else:\n",
+    "    for dim in [\"intencion\", \"categoria\", \"urgencia\"]:\n",
+    "        print(f\"\\n=== {dim} ===\")\n",
+    "        print(classification_report(m[f\"{dim}_manual\"], m[dim], zero_division=0))"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
