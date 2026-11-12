@@ -3,7 +3,7 @@
 <html lang="en">
 <head><meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>02_clasificacion_reglas (1)</title><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
+<title>01_limpieza_spark</title><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
 <style type="text/css">
     pre { line-height: 125%; }
 td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
@@ -7796,340 +7796,81 @@ a.anchor-link {
 <!-- End of mermaid configuration --></head>
 <body class="jp-Notebook" data-jp-theme-light="true" data-jp-theme-name="JupyterLab Light">
 <main>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=dbce56b8">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=e04629d0">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h1 id="02-%C2%B7-Etiquetado-por-reglas:-intenci%C3%B3n,-categor%C3%ADa-y-urgencia-(pandas-+-PyArrow)">02 · Etiquetado por reglas: intención, categoría y urgencia (pandas + PyArrow)<a class="anchor-link" href="#02-%C2%B7-Etiquetado-por-reglas:-intenci%C3%B3n,-categor%C3%ADa-y-urgencia-(pandas-+-PyArrow)">¶</a></h1><p><strong>Objetivo:</strong> asignar a cada tweet de <strong>cliente</strong> tres etiquetas (más una bandera de frustración) con diccionarios de palabras, y generar una muestra para etiquetar a mano y medir qué tan buenas son las reglas.</p>
-<p><strong>Etiquetas</strong></p>
-<table>
-<thead>
-<tr>
-<th>Columna</th>
-<th>Valores</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>intencion</code></td>
-<td><code>falla</code>, <code>solicitud</code>, <code>otro</code> (la falla <strong>no</strong> requiere signo de pregunta ni su ausencia)</td>
-</tr>
-<tr>
-<td><code>categoria</code></td>
-<td>telefonía/llamadas, cuenta/iCloud, pagos, servicios Apple, conectividad, apps/funciones, iOS/software/rendimiento, hardware, dispositivo_general, otros</td>
-</tr>
-<tr>
-<td><code>urgencia</code></td>
-<td><code>baja</code>, <code>media</code>, <code>critica</code> (solo las fallas pueden ser media o crítica)</td>
-</tr>
-<tr>
-<td><code>frustracion</code></td>
-<td>verdadero/falso (no cambia la urgencia; se guarda para análisis)</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Archivos que se generan</strong></p>
-<table>
-<thead>
-<tr>
-<th>Archivo</th>
-<th>Para qué sirve</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>clientes_etiquetados.parquet</code></td>
-<td><strong>Todos</strong> los tweets de clientes con la etiqueta automática.</td>
-</tr>
-<tr>
-<td><code>muestra_para_etiquetar.csv</code></td>
-<td>Muestra pequeña <strong>sin</strong> etiquetas automáticas, para que tú pongas la etiqueta correcta a mano.</td>
-</tr>
-<tr>
-<td><code>muestra_clave_reglas.csv</code></td>
-<td>Los mismos tweets <strong>con</strong> la etiqueta automática; se usa solo al final para comparar.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Cómo se eligen las categorías:</strong> el código <strong>no las descubre</strong>: salen del catálogo que se define en la sección 2. La sección 6 sirve para comprobar si falta alguna.</p>
+<h1 id="01-%C2%B7-Limpieza-y-filtrado-del-dataset-(@AppleSupport)-con-PySpark">01 · Limpieza y filtrado del dataset (@AppleSupport) con PySpark<a class="anchor-link" href="#01-%C2%B7-Limpieza-y-filtrado-del-dataset-(@AppleSupport)-con-PySpark">¶</a></h1><p><strong>Objetivo:</strong> partir del CSV completo de <em>Customer Support on Twitter</em> (~3 millones de tweets de varias marcas) y producir un conjunto de datos que contenga <strong>solo</strong> la conversación de <code>@AppleSupport</code>: lo que los clientes le escriben y lo que Apple responde.</p>
+<p><strong>Por qué Spark y Parquet:</strong> Spark procesa el CSV de manera distribuida utilizando un esquema explícito (<code>StructType</code>) y transformaciones nativas (<code>pyspark.sql.functions as F</code>). Al finalizar, el producto de datos filtrado se lleva al Driver con <code>toPandas()</code> y se almacena en formato <strong>Parquet</strong> con PyArrow, siguiendo el patrón de los laboratorios para evitar dependencias de <code>winutils.exe</code> en Windows.</p>
+<p><strong>Qué produce:</strong> <code>../data/processed/apple_support_filtrado.parquet</code> y una tabla de conteos paso a paso para la sección de <em>Resultados</em> de la tesis.</p>
 </div>
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=2d054b7c">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=11d2b183">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="1.-Lectura-Parquet-y-rutas">1. Lectura Parquet y rutas<a class="anchor-link" href="#1.-Lectura-Parquet-y-rutas">¶</a></h2><p>Los datos de entrada son el archivo Parquet generado por el notebook 01. La lectura y la clasificación se hacen con pandas y PyArrow, sin Spark ni Hadoop.</p>
+<h2 id="1.-Preparaci%C3%B3n-del-entorno-e-inicializaci%C3%B3n-de-Spark">1. Preparación del entorno e inicialización de Spark<a class="anchor-link" href="#1.-Preparaci%C3%B3n-del-entorno-e-inicializaci%C3%B3n-de-Spark">¶</a></h2><p>Configuramos las variables de entorno de Python para PySpark (<code>PYSPARK_PYTHON</code> y <code>PYSPARK_DRIVER_PYTHON</code>) y creamos la <code>SparkSession</code> en modo <code>local[*]</code> compatible con <strong>Spark 3.5.9</strong>.</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=615639a2">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=d89762da">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [1]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [15]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># ============================================================</span>
+<span class="c1"># 1. PREPARACIÓN DEL ENTORNO Y SPARK SESSION</span>
+<span class="c1"># ============================================================</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.parquet</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pq</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.feature_extraction.text</span><span class="w"> </span><span class="kn">import</span> <span class="n">CountVectorizer</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">classification_report</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
 
-<span class="n">IN</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"../data/processed/apple_support_filtrado.parquet"</span><span class="p">)</span>
-<span class="n">OUT</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"../data/processed/clientes_etiquetados.parquet"</span><span class="p">)</span>
-<span class="n">MUESTRA</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"../data/processed/muestra_para_etiquetar.csv"</span><span class="p">)</span>
-<span class="n">CLAVE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"../data/processed/muestra_clave_reglas.csv"</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=2ff5b408">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="2.-Cat%C3%A1logo-de-palabras-(la-parte-que-t%C3%BA-ajustas)">2. Catálogo de palabras (la parte que tú ajustas)<a class="anchor-link" href="#2.-Cat%C3%A1logo-de-palabras-(la-parte-que-t%C3%BA-ajustas)">¶</a></h2><p>Todo el conocimiento del clasificador está en estas listas de <strong>expresiones regulares</strong>. Para editarlas basta con agregar o quitar elementos.</p>
-<p><strong>Cómo leerlas</strong></p>
-<ul>
-<li><code>patron()</code> une una lista en una sola búsqueda que ignora mayúsculas y exige que la palabra <strong>empiece</strong> en un límite de palabra: <code>crash</code> detecta <code>crashes</code>, pero <code>bug</code> no se activa dentro de otra palabra. Para exigir que <strong>termine</strong> también, se agrega <code>\b</code> (por ejemplo <code>apps?\b</code>, para no confundir "app" con "apple").</li>
-<li><code>'?</code> significa "apóstrofe opcional" (<code>can'?t</code> acepta <em>cant</em> y <em>can't</em>).</li>
-</ul>
-<p><strong>Cómo se decide cada etiqueta</strong></p>
-<ul>
-<li><strong>Intención:</strong> si aparece una <em>falla fuerte</em> (incluye todo lo crítico) → <code>falla</code>. Si no, y hay una solicitud explícita ("how do I…") → <code>solicitud</code>. Si no, y hay una <em>falla débil</em> ("issue", "restart", "fix") → <code>falla</code>. Si no, y hay patrón de pregunta <strong>o</strong> "?" → <code>solicitud</code>. Si nada coincide → <code>otro</code>. Así "how do I restart my iPhone" es solicitud, pero "my phone won't restart" es falla.</li>
-<li><strong>Categoría:</strong> gana la categoría con más palabras distintas coincidentes; en empate, la primera del diccionario. Si ninguna coincide pero se nombra un equipo ("iphone", "mac") → <code>dispositivo_general</code>; si no → <code>otros</code>. Los <em>síntomas</em> (glitch, freezing, lag, unresponsive) apuntan a software; los daños físicos (cracked, fallen, battery) a hardware.</li>
-<li><strong>Urgencia</strong> (solo fallas): <strong>crítica</strong> si hay pérdida de servicio, acceso, datos, dinero, seguridad o función tras daño físico (por ejemplo, no poder hacer llamadas); <strong>media</strong> si hay función degradada; <strong>baja</strong> si es una molestia menor ("weird", "annoying"). Una falla media pasa a <strong>crítica</strong> si hay un <em>amplificador</em> de duración, repetición o alcance (<em>twice</em>, <em>constantly</em>, <em>since yesterday's update</em>, <em>everyone</em>).</li>
-</ul>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=dd1a84c7">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-<div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># ---------- 1. INTENCIÓN ----------</span>
-<span class="c1"># Falla "fuerte": por sí sola indica que algo no funciona</span>
-<span class="n">FALLA_FUERTE</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="sa">r</span><span class="s2">"not working"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"stopped working"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"not able"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"unable"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"won'?t"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"can'?t"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"cannot"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"couldn'?t"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"no longer"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"broken"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"crash"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"bug"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"error"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"stuck"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"freez"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"frozen"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"glitch"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"lag"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"fail"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"outage"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"down\b"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"slow"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"drain"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"dying"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"died"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"dies\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"lost"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"missing"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"disappear"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"black screen"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"unresponsive"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"soft reset"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"hard reset"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"force restart"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"fallen"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"fell\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"cracked"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"overheat"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"ruin"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"(?:isn|aren|wasn|weren|doesn|don|didn|hasn|haven|hadn)'?t\s+(?:\w+\s+){0,2}?"</span>
-    <span class="sa">r</span><span class="s2">"(?:allow\w*|let\w*|work\w*|respond\w*|load\w*|show\w*|charg\w*|connect\w*|sync\w*|receiv\w*|send\w*)"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"not\s+(?:receiving|sending|syncing|charging|loading|showing|allowing|letting|responding)"</span><span class="p">,</span>
-<span class="p">]</span>
-<span class="c1"># Falla "débil": suele indicar falla, pero puede ser una pregunta ("how do I restart...")</span>
-<span class="n">FALLA_DEBIL</span> <span class="o">=</span> <span class="p">[</span><span class="sa">r</span><span class="s2">"issue"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"problem"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"fix"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"restart"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"reboot"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"reset"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"keeps"</span><span class="p">,</span>
-               <span class="sa">r</span><span class="s2">"annoying"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"weird"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"wrong"</span><span class="p">]</span>
-<span class="c1"># Solicitud explícita: gana sobre la falla débil, NO sobre la fuerte</span>
-<span class="n">SOLICITUD_EXPLICITA</span> <span class="o">=</span> <span class="p">[</span><span class="sa">r</span><span class="s2">"how (?:do|can|to|does|should)"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"is it possible"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"is there (?:a|any) way"</span><span class="p">]</span>
-<span class="c1"># Solicitud general: no requiere signo de pregunta</span>
-<span class="n">SOLICITUD</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="sa">r</span><span class="s2">"where (?:do|can|is|are)"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"what (?:is|does|are|happens)"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"when (?:will|is|does|can)"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"is there"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"does (?:anyone|apple|it|the)"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"do (?:you|apple)"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"can (?:i|you|we)"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"could (?:you|i)"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"any (?:way|idea|tips?|update|news)"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"please (?:help|advise|explain|confirm)"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"how much"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"which"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"wondering"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"want to know"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"looking for"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"need (?:help|info|to know)"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"i want to"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"would like to"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"trying to"</span><span class="p">,</span>
-<span class="p">]</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pyspark.sql</span><span class="w"> </span><span class="kn">import</span> <span class="n">SparkSession</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pyspark.sql</span><span class="w"> </span><span class="kn">import</span> <span class="n">functions</span> <span class="k">as</span> <span class="n">F</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pyspark.sql.types</span><span class="w"> </span><span class="kn">import</span> <span class="n">StructType</span><span class="p">,</span> <span class="n">StructField</span><span class="p">,</span> <span class="n">StringType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pyspark</span><span class="w"> </span><span class="kn">import</span> <span class="n">StorageLevel</span>
 
-<span class="c1"># ---------- 2. CATEGORÍAS (orden = prioridad en empates) ----------</span>
-<span class="n">CATEGORIAS</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">"telefonia_llamadas"</span><span class="p">:</span> <span class="p">[</span><span class="sa">r</span><span class="s2">"(?:phone |voice )?calls?\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"phone calls?"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"voicemail"</span><span class="p">,</span>
-                           <span class="sa">r</span><span class="s2">"dial"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"ringing"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"no service"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"\bcaller"</span><span class="p">],</span>
-    <span class="s2">"cuenta_icloud"</span><span class="p">:</span> <span class="p">[</span><span class="sa">r</span><span class="s2">"icloud"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"apple id"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"password"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"log ?in"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"sign ?in"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"locked"</span><span class="p">,</span>
-                      <span class="sa">r</span><span class="s2">"verification"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"2fa"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"backup"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"storage"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"account"</span><span class="p">],</span>
-    <span class="s2">"pagos_facturacion"</span><span class="p">:</span> <span class="p">[</span><span class="sa">r</span><span class="s2">"charged"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"charges?\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"billing"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"\bbills?\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"refund"</span><span class="p">,</span>
-                          <span class="sa">r</span><span class="s2">"payment"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"subscription"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"invoice"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"apple pay"</span><span class="p">,</span>
-                          <span class="sa">r</span><span class="s2">"credit card"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"purchase"</span><span class="p">],</span>
-    <span class="s2">"servicios_apple"</span><span class="p">:</span> <span class="p">[</span><span class="sa">r</span><span class="s2">"apple music"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"imessage"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"facetime"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"siri"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"icloud mail"</span><span class="p">,</span>
-                        <span class="sa">r</span><span class="s2">"apple tv"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"podcast"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"maps\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"itunes"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"airdrop"</span><span class="p">,</span>
-                        <span class="sa">r</span><span class="s2">"homepod"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"carplay"</span><span class="p">],</span>
-    <span class="s2">"conectividad"</span><span class="p">:</span> <span class="p">[</span><span class="sa">r</span><span class="s2">"wi-?fi"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"bluetooth"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"cellular"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"signal"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"network"</span><span class="p">,</span>
-                     <span class="sa">r</span><span class="s2">"mobile data"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"data\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"sim\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"carrier"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"roaming"</span><span class="p">,</span>
-                     <span class="sa">r</span><span class="s2">"hotspot"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"lte\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"internet"</span><span class="p">],</span>
-    <span class="s2">"apps_funciones"</span><span class="p">:</span> <span class="p">[</span><span class="sa">r</span><span class="s2">"app store"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"apps?\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"download"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"testflight"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"safari"</span><span class="p">,</span>
-                       <span class="sa">r</span><span class="s2">"mail\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"photos?\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"widget"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"notification"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"feature"</span><span class="p">,</span>
-                       <span class="sa">r</span><span class="s2">"quick edit"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"edit\b"</span><span class="p">],</span>
-    <span class="s2">"ios_software_rendimiento"</span><span class="p">:</span> <span class="p">[</span><span class="sa">r</span><span class="s2">"ios(?:\s?\d+)?\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"update"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"upgrade"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"macos"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"beta"</span><span class="p">,</span>
-                                 <span class="sa">r</span><span class="s2">"install"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"firmware"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"keyboard"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"glitch"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"bug"</span><span class="p">,</span>
-                                 <span class="sa">r</span><span class="s2">"freez"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"frozen"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"crash"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"lag"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"slow"</span><span class="p">,</span>
-                                 <span class="sa">r</span><span class="s2">"unresponsive"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"performance"</span><span class="p">],</span>
-    <span class="s2">"hardware_dispositivo"</span><span class="p">:</span> <span class="p">[</span><span class="sa">r</span><span class="s2">"battery"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"screens?\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"charging"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"charger"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"cracked"</span><span class="p">,</span>
-                             <span class="sa">r</span><span class="s2">"fallen"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"fell\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"dropped"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"water"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"speaker"</span><span class="p">,</span>
-                             <span class="sa">r</span><span class="s2">"microphone"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"buttons?\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"camera"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"overheat"</span><span class="p">,</span>
-                             <span class="sa">r</span><span class="s2">"turn(?:ing)? on"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"display"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"touch id"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"face id"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"airpods"</span><span class="p">],</span>
-<span class="p">}</span>
-<span class="c1"># Si hay falla pero ninguna categoría coincide, y solo se nombra el equipo:</span>
-<span class="n">DISPOSITIVO</span> <span class="o">=</span> <span class="p">[</span><span class="sa">r</span><span class="s2">"iphone"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"ipad"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"ipod"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"mac(?:book)?\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"imac"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"phone"</span><span class="p">,</span>
-               <span class="sa">r</span><span class="s2">"(?:apple )?watch\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"airpods"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"device"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"laptop"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"tablet"</span><span class="p">]</span>
+<span class="c1"># Configuración del entorno Python para PySpark (estilo Laboratorios 6 y 7)</span>
+<span class="n">python_executable</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">executable</span>
+<span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"PYSPARK_PYTHON"</span><span class="p">]</span> <span class="o">=</span> <span class="n">python_executable</span>
+<span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"PYSPARK_DRIVER_PYTHON"</span><span class="p">]</span> <span class="o">=</span> <span class="n">python_executable</span>
+<span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"SPARK_LOCAL_IP"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"127.0.0.1"</span>
 
-<span class="c1"># ---------- 3. URGENCIA ----------</span>
-<span class="n">CRITICA</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="sa">r</span><span class="s2">"outage"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"down for"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"(?:is|are) down\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"services? (?:is |are )?down"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"completely (?:dead|broken|unusable|died)"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"unusable"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"bricked"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"won'?t (?:turn on|power|boot|start)"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"boot ?loop"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"stuck on (?:the )?(?:apple )?logo"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"data loss"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"lost (?:all|everything|my (?:photos|data|contacts|messages))"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"(?:photos|data|contacts|messages) (?:gone|deleted|disappeared|lost)"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"hacked"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"unauthori[sz]ed"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"stolen"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"fraud"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"locked out"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"(?:can'?t|cannot|unable to|not able to)\s+(?:log ?in|sign ?in|access)"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"charged (?:twice|\d+)"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"double charged"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"disabled"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"no service"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"911"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"emergency"</span><span class="p">,</span>
-    <span class="c1"># no puede hacer/recibir llamadas (con hasta 3 palabras entre medio)</span>
-    <span class="sa">r</span><span class="s2">"(?:not able to|unable to|can'?t|cannot|couldn'?t)\s+(?:\w+\s+){0,3}?(?:make|receive|place|get)\s+(?:\w+\s+){0,4}?calls?"</span><span class="p">,</span>
-    <span class="c1"># daño físico seguido de pérdida de función</span>
-    <span class="sa">r</span><span class="s2">"(?:fell|fallen|dropped|water|wet)[^.!?]{0,40}(?:stopped working|dead|not working|won'?t turn on)"</span><span class="p">,</span>
-<span class="p">]</span>
-<span class="c1"># Media = cualquier falla fuerte + estas (menos "annoying/weird/wrong", que quedan en baja)</span>
-<span class="n">MEDIA_EXTRA</span> <span class="o">=</span> <span class="p">[</span><span class="sa">r</span><span class="s2">"problem"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"issue"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"fix"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"keeps"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"restart"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"reboot"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"reset"</span><span class="p">]</span>
-<span class="n">AMPLIFICADORES</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="sa">r</span><span class="s2">"urgent"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"asap"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"immediately"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"still\b"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"for (?:days|hours|weeks|months)"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"since (?:yesterday|monday|tuesday|wednesday|thursday|friday|this morning|last|the update)"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"(?:past|last) (?:\w+ ){0,2}(?:hours?|days?|weeks?)"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"twice"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"(?:three|four|several|multiple) times"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"again"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"constantly"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"every (?:time|day|hour)"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"all the time"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"everyone"</span><span class="p">,</span>
-    <span class="sa">r</span><span class="s2">"anyone else"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"all (?:users|of us)"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"for work"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"work(?:ing)? from"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"business"</span><span class="p">,</span>
-<span class="p">]</span>
-<span class="c1"># Señal de frustración: NO cambia la urgencia; se guarda aparte para análisis</span>
-<span class="n">FRUSTRACION</span> <span class="o">=</span> <span class="p">[</span><span class="sa">r</span><span class="s2">"fuck"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"shit"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"damn"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"crap"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"ridiculous"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"unacceptable"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"terrible"</span><span class="p">,</span>
-               <span class="sa">r</span><span class="s2">"worst"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"horrible"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"frustrat"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"angry"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"switch(?:ing)? to"</span><span class="p">,</span>
-               <span class="sa">r</span><span class="s2">"never (?:buy|again)"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"🤬"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"😡"</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"😤"</span><span class="p">]</span>
+<span class="c1"># Rutas de entrada y salida</span>
+<span class="n">RUTA_RAW</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"../data/raw/twcs.csv"</span><span class="p">)</span>
+<span class="n">RUTA_OUT</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"../data/processed/apple_support_filtrado.parquet"</span><span class="p">)</span>
+<span class="n">RUTA_OUT</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-<span class="k">def</span><span class="w"> </span><span class="nf">patron</span><span class="p">(</span><span class="n">lista</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Une una lista de expresiones en un solo patrón (sin distinguir mayúsculas)."""</span>
-    <span class="k">return</span> <span class="sa">r</span><span class="s2">"(?i)\b(?:"</span> <span class="o">+</span> <span class="s2">"|"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lista</span><span class="p">)</span> <span class="o">+</span> <span class="sa">r</span><span class="s2">")"</span>
+<span class="n">BRAND</span> <span class="o">=</span> <span class="s2">"AppleSupport"</span>
+<span class="n">conteo</span> <span class="o">=</span> <span class="p">{}</span>
 
-<span class="n">RX_FALLA_FUERTE</span> <span class="o">=</span> <span class="n">patron</span><span class="p">(</span><span class="n">FALLA_FUERTE</span> <span class="o">+</span> <span class="n">CRITICA</span><span class="p">)</span>   <span class="c1"># todo lo crítico también es falla</span>
-<span class="n">RX_FALLA_DEBIL</span> <span class="o">=</span> <span class="n">patron</span><span class="p">(</span><span class="n">FALLA_DEBIL</span><span class="p">)</span>
-<span class="n">RX_SOL_EXPLICITA</span> <span class="o">=</span> <span class="n">patron</span><span class="p">(</span><span class="n">SOLICITUD_EXPLICITA</span><span class="p">)</span>
-<span class="n">RX_SOLICITUD</span> <span class="o">=</span> <span class="n">patron</span><span class="p">(</span><span class="n">SOLICITUD</span><span class="p">)</span>
-<span class="n">RX_CRITICA</span> <span class="o">=</span> <span class="n">patron</span><span class="p">(</span><span class="n">CRITICA</span><span class="p">)</span>
-<span class="n">RX_MEDIA</span> <span class="o">=</span> <span class="n">patron</span><span class="p">(</span><span class="n">FALLA_FUERTE</span> <span class="o">+</span> <span class="n">MEDIA_EXTRA</span><span class="p">)</span>
-<span class="n">RX_AMPL</span> <span class="o">=</span> <span class="n">patron</span><span class="p">(</span><span class="n">AMPLIFICADORES</span><span class="p">)</span>
-<span class="n">RX_FRUSTRACION</span> <span class="o">=</span> <span class="n">patron</span><span class="p">(</span><span class="n">FRUSTRACION</span><span class="p">)</span>
-<span class="n">RX_DISPOSITIVO</span> <span class="o">=</span> <span class="n">patron</span><span class="p">(</span><span class="n">DISPOSITIVO</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=9ed59141">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="3.-Funci%C3%B3n-de-clasificaci%C3%B3n-en-pandas">3. Función de clasificación en pandas<a class="anchor-link" href="#3.-Funci%C3%B3n-de-clasificaci%C3%B3n-en-pandas">¶</a></h2><p><code>clasificar()</code> aplica las mismas reglas a columnas de pandas. Cada patrón aporta como máximo un punto por categoría; en caso de empate, gana la primera categoría del catálogo.</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=b2ce2b70">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-<div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">clasificar</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">columna</span><span class="o">=</span><span class="s2">"texto_limpio"</span><span class="p">):</span>
-    <span class="n">resultado</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-    <span class="n">t</span> <span class="o">=</span> <span class="p">(</span><span class="n">resultado</span><span class="p">[</span><span class="n">columna</span><span class="p">]</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
-         <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="sa">r</span><span class="s2">"[’‘`]"</span><span class="p">,</span> <span class="s2">"'"</span><span class="p">,</span> <span class="n">regex</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="c1"># Inicialización de SparkSession (Spark 3.5.9)</span>
+<span class="n">spark</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">SparkSession</span><span class="o">.</span><span class="n">builder</span>
+    <span class="o">.</span><span class="n">appName</span><span class="p">(</span><span class="s2">"Tesis_01_Limpieza_AppleSupport"</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">master</span><span class="p">(</span><span class="s2">"local[*]"</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">config</span><span class="p">(</span><span class="s2">"spark.driver.host"</span><span class="p">,</span> <span class="s2">"127.0.0.1"</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">config</span><span class="p">(</span><span class="s2">"spark.driver.bindAddress"</span><span class="p">,</span> <span class="s2">"127.0.0.1"</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">config</span><span class="p">(</span><span class="s2">"spark.sql.shuffle.partitions"</span><span class="p">,</span> <span class="s2">"8"</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">config</span><span class="p">(</span><span class="s2">"spark.sql.legacy.timeParserPolicy"</span><span class="p">,</span> <span class="s2">"LEGACY"</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">getOrCreate</span><span class="p">()</span>
+<span class="p">)</span>
 
-    <span class="n">fuerte</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">RX_FALLA_FUERTE</span><span class="p">,</span> <span class="n">na</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">debil</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">RX_FALLA_DEBIL</span><span class="p">,</span> <span class="n">na</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">explicita</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">RX_SOL_EXPLICITA</span><span class="p">,</span> <span class="n">na</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">solicitud</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">RX_SOLICITUD</span><span class="p">,</span> <span class="n">na</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">|</span> <span class="n">t</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="s2">"?"</span><span class="p">,</span> <span class="n">regex</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">na</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-
-    <span class="n">resultado</span><span class="p">[</span><span class="s2">"intencion"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"otro"</span>
-    <span class="n">resultado</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">solicitud</span><span class="p">,</span> <span class="s2">"intencion"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"solicitud"</span>
-    <span class="n">resultado</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">debil</span><span class="p">,</span> <span class="s2">"intencion"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"falla"</span>
-    <span class="n">resultado</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">explicita</span><span class="p">,</span> <span class="s2">"intencion"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"solicitud"</span>
-    <span class="n">resultado</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">fuerte</span><span class="p">,</span> <span class="s2">"intencion"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"falla"</span>
-
-    <span class="n">puntajes</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">resultado</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">categoria</span><span class="p">,</span> <span class="n">patrones</span> <span class="ow">in</span> <span class="n">CATEGORIAS</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="n">puntajes</span><span class="p">[</span><span class="n">categoria</span><span class="p">]</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span>
-            <span class="n">t</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">patron</span><span class="p">([</span><span class="n">p</span><span class="p">]),</span> <span class="n">na</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">"int8"</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">patrones</span>
-        <span class="p">)</span>
-    <span class="n">maximo</span> <span class="o">=</span> <span class="n">puntajes</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">categoria</span> <span class="o">=</span> <span class="n">puntajes</span><span class="o">.</span><span class="n">idxmax</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">sin_coincidencia</span> <span class="o">=</span> <span class="n">maximo</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-    <span class="n">dispositivo</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">RX_DISPOSITIVO</span><span class="p">,</span> <span class="n">na</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">categoria</span> <span class="o">=</span> <span class="n">categoria</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
-        <span class="o">~</span><span class="n">sin_coincidencia</span><span class="p">,</span>
-        <span class="n">dispositivo</span><span class="o">.</span><span class="n">map</span><span class="p">({</span><span class="kc">True</span><span class="p">:</span> <span class="s2">"dispositivo_general"</span><span class="p">,</span> <span class="kc">False</span><span class="p">:</span> <span class="s2">"otros"</span><span class="p">}),</span>
-    <span class="p">)</span>
-    <span class="n">resultado</span><span class="p">[</span><span class="s2">"categoria"</span><span class="p">]</span> <span class="o">=</span> <span class="n">categoria</span>
-
-    <span class="n">es_falla</span> <span class="o">=</span> <span class="n">resultado</span><span class="p">[</span><span class="s2">"intencion"</span><span class="p">]</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="s2">"falla"</span><span class="p">)</span>
-    <span class="n">media</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">RX_MEDIA</span><span class="p">,</span> <span class="n">na</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">critica</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">RX_CRITICA</span><span class="p">,</span> <span class="n">na</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">amplificada</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">RX_AMPL</span><span class="p">,</span> <span class="n">na</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">resultado</span><span class="p">[</span><span class="s2">"urgencia"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"baja"</span>
-    <span class="n">resultado</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">es_falla</span> <span class="o">&amp;</span> <span class="n">media</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">amplificada</span><span class="p">,</span> <span class="s2">"urgencia"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"media"</span>
-    <span class="n">resultado</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">es_falla</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">critica</span> <span class="o">|</span> <span class="p">(</span><span class="n">media</span> <span class="o">&amp;</span> <span class="n">amplificada</span><span class="p">)),</span> <span class="s2">"urgencia"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"critica"</span>
-    <span class="n">resultado</span><span class="p">[</span><span class="s2">"frustracion"</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">RX_FRUSTRACION</span><span class="p">,</span> <span class="n">na</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">resultado</span>
-</pre></div>
-</div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=ab158472">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="4.-Prueba-con-ejemplos">4. Prueba con ejemplos<a class="anchor-link" href="#4.-Prueba-con-ejemplos">¶</a></h2><p>Antes de correr todo el dataset, se verifica el catálogo con ejemplos reales (los que me compartiste) y casos de contraste. <strong>Agrega aquí tus propios casos difíciles</strong> y vuelve a correr la celda cada vez que cambies el catálogo; es la mejor forma de no romper algo al corregir otra cosa.</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=9673d8d3">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-<div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="n">ejemplos</span> <span class="o">=</span> <span class="p">[</span>
- <span class="s2">"@AppleSupport my phone is not able to receive or make any phone calls."</span><span class="p">,</span>
- <span class="s2">"@AppleSupport iphone glitch"</span><span class="p">,</span>
- <span class="s2">"@AppleSupport mac glitch"</span><span class="p">,</span>
- <span class="s2">"I've had to soft reset my phone twice in the past two hours because it became unresponsive. @AppleSupport"</span><span class="p">,</span>
- <span class="s2">"@AppleSupport please fix the fucking problem with keyboard or I'll switch to @USER"</span><span class="p">,</span>
- <span class="s2">"@AppleSupport since yesterdays update, my phone is dying of glitches and constantly freezing..."</span><span class="p">,</span>
- <span class="s2">"@AppleSupport extremely frustrating (and coincidental??) that my phone slows way down with the new updates...since the NEW phones are out🤬"</span><span class="p">,</span>
- <span class="s2">"@AppleSupport It‘s fallen down and then stopped working"</span><span class="p">,</span>
- <span class="s2">"Hey @AppleSupport the iOS update is ruining my Apple iPhone experience pls fix"</span><span class="p">,</span>
- <span class="s2">"@AppleSupport No. And it also isn't allowing me to do the new quick edit thing. Hasn't since the first time."</span><span class="p">,</span>
- <span class="c1"># contrastes</span>
- <span class="s2">"@AppleSupport How do I restart my iPhone?"</span><span class="p">,</span>
- <span class="s2">"@AppleSupport how to change my apple id password"</span><span class="p">,</span>
- <span class="s2">"@AppleSupport I was charged twice for my subscription"</span><span class="p">,</span>
- <span class="s2">"@AppleSupport thanks for the help!"</span><span class="p">,</span>
-<span class="p">]</span>
-<span class="n">prueba</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"texto_limpio"</span><span class="p">:</span> <span class="n">ejemplos</span><span class="p">})</span>
-<span class="n">pd</span><span class="o">.</span><span class="n">set_option</span><span class="p">(</span><span class="s2">"display.max_colwidth"</span><span class="p">,</span> <span class="mi">70</span><span class="p">)</span>
-<span class="n">clasificar</span><span class="p">(</span><span class="n">prueba</span><span class="p">)</span>
+<span class="n">spark</span><span class="o">.</span><span class="n">sparkContext</span><span class="o">.</span><span class="n">setLogLevel</span><span class="p">(</span><span class="s2">"WARN"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Spark:"</span><span class="p">,</span> <span class="n">spark</span><span class="o">.</span><span class="n">version</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Master:"</span><span class="p">,</span> <span class="n">spark</span><span class="o">.</span><span class="n">sparkContext</span><span class="o">.</span><span class="n">master</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Spark UI:"</span><span class="p">,</span> <span class="n">spark</span><span class="o">.</span><span class="n">sparkContext</span><span class="o">.</span><span class="n">uiWebUrl</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -8139,9 +7880,90 @@ a.anchor-link {
 <div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
 </div>
 <div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child jp-OutputArea-executeResult">
-<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[4]:</div>
-<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Spark: 3.5.9
+Master: local[*]
+Spark UI: http://127.0.0.1:4042
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=f60a1060">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="2.-Ingesta-con-esquema-expl%C3%ADcito-(StructType)">2. Ingesta con esquema explícito (<code>StructType</code>)<a class="anchor-link" href="#2.-Ingesta-con-esquema-expl%C3%ADcito-(StructType)">¶</a></h2><p>Definimos el esquema explícito para que los identificadores de 18-19 dígitos se lean como <code>StringType</code> sin perder precisión, activando <code>multiLine</code> y <code>escape</code> para manejar saltos de línea y comillas dentro de los tweets.</p>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=26d306de">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [16]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># ============================================================</span>
+<span class="c1"># 2. INGESTA DEL CSV CON STRUCTTYPE</span>
+<span class="c1"># ============================================================</span>
+<span class="n">schema_twcs</span> <span class="o">=</span> <span class="n">StructType</span><span class="p">([</span>
+    <span class="n">StructField</span><span class="p">(</span><span class="s2">"tweet_id"</span><span class="p">,</span> <span class="n">StringType</span><span class="p">(),</span> <span class="kc">True</span><span class="p">),</span>
+    <span class="n">StructField</span><span class="p">(</span><span class="s2">"author_id"</span><span class="p">,</span> <span class="n">StringType</span><span class="p">(),</span> <span class="kc">True</span><span class="p">),</span>
+    <span class="n">StructField</span><span class="p">(</span><span class="s2">"inbound"</span><span class="p">,</span> <span class="n">StringType</span><span class="p">(),</span> <span class="kc">True</span><span class="p">),</span>
+    <span class="n">StructField</span><span class="p">(</span><span class="s2">"created_at"</span><span class="p">,</span> <span class="n">StringType</span><span class="p">(),</span> <span class="kc">True</span><span class="p">),</span>
+    <span class="n">StructField</span><span class="p">(</span><span class="s2">"text"</span><span class="p">,</span> <span class="n">StringType</span><span class="p">(),</span> <span class="kc">True</span><span class="p">),</span>
+    <span class="n">StructField</span><span class="p">(</span><span class="s2">"response_tweet_id"</span><span class="p">,</span> <span class="n">StringType</span><span class="p">(),</span> <span class="kc">True</span><span class="p">),</span>
+    <span class="n">StructField</span><span class="p">(</span><span class="s2">"in_response_to_tweet_id"</span><span class="p">,</span> <span class="n">StringType</span><span class="p">(),</span> <span class="kc">True</span><span class="p">)</span>
+<span class="p">])</span>
+
+<span class="n">df_crudo</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">spark</span><span class="o">.</span><span class="n">read</span>
+    <span class="o">.</span><span class="n">schema</span><span class="p">(</span><span class="n">schema_twcs</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">option</span><span class="p">(</span><span class="s2">"header"</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">option</span><span class="p">(</span><span class="s2">"multiLine"</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">option</span><span class="p">(</span><span class="s2">"escape"</span><span class="p">,</span> <span class="s1">'"'</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">csv</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">RUTA_RAW</span><span class="p">))</span>
+<span class="p">)</span>
+
+<span class="n">df_crudo</span><span class="o">.</span><span class="n">printSchema</span><span class="p">()</span>
+<span class="n">conteo</span><span class="p">[</span><span class="s2">"total_original"</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_crudo</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Total de registros originales:"</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">conteo</span><span class="p">[</span><span class="s1">'total_original'</span><span class="p">]</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="n">display</span><span class="p">(</span><span class="n">df_crudo</span><span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">toPandas</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>root
+ |-- tweet_id: string (nullable = true)
+ |-- author_id: string (nullable = true)
+ |-- inbound: string (nullable = true)
+ |-- created_at: string (nullable = true)
+ |-- text: string (nullable = true)
+ |-- response_tweet_id: string (nullable = true)
+ |-- in_response_to_tweet_id: string (nullable = true)
+
+Total de registros originales: 2,811,774
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
 <div>
 <style scoped="">
     .dataframe tbody tr th:only-of-type {
@@ -8160,125 +7982,65 @@ a.anchor-link {
 <thead>
 <tr style="text-align: right;">
 <th></th>
-<th>texto_limpio</th>
-<th>intencion</th>
-<th>categoria</th>
-<th>urgencia</th>
-<th>frustracion</th>
+<th>tweet_id</th>
+<th>author_id</th>
+<th>inbound</th>
+<th>created_at</th>
+<th>text</th>
+<th>response_tweet_id</th>
+<th>in_response_to_tweet_id</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <th>0</th>
-<td>@AppleSupport my phone is not able to receive or make any phone ca...</td>
-<td>falla</td>
-<td>telefonia_llamadas</td>
-<td>critica</td>
+<td>1</td>
+<td>sprintcare</td>
 <td>False</td>
+<td>Tue Oct 31 22:10:47 +0000 2017</td>
+<td>@115712 I understand. I would like to assist y...</td>
+<td>2</td>
+<td>3</td>
 </tr>
 <tr>
 <th>1</th>
-<td>@AppleSupport iphone glitch</td>
-<td>falla</td>
-<td>ios_software_rendimiento</td>
-<td>media</td>
-<td>False</td>
+<td>2</td>
+<td>115712</td>
+<td>True</td>
+<td>Tue Oct 31 22:11:45 +0000 2017</td>
+<td>@sprintcare and how do you propose we do that</td>
+<td>NaN</td>
+<td>1</td>
 </tr>
 <tr>
 <th>2</th>
-<td>@AppleSupport mac glitch</td>
-<td>falla</td>
-<td>ios_software_rendimiento</td>
-<td>media</td>
-<td>False</td>
+<td>3</td>
+<td>115712</td>
+<td>True</td>
+<td>Tue Oct 31 22:08:27 +0000 2017</td>
+<td>@sprintcare I have sent several private messag...</td>
+<td>1</td>
+<td>4</td>
 </tr>
 <tr>
 <th>3</th>
-<td>I've had to soft reset my phone twice in the past two hours becaus...</td>
-<td>falla</td>
-<td>ios_software_rendimiento</td>
-<td>critica</td>
+<td>4</td>
+<td>sprintcare</td>
 <td>False</td>
+<td>Tue Oct 31 21:54:49 +0000 2017</td>
+<td>@115712 Please send us a Private Message so th...</td>
+<td>3</td>
+<td>5</td>
 </tr>
 <tr>
 <th>4</th>
-<td>@AppleSupport please fix the fucking problem with keyboard or I'll...</td>
-<td>falla</td>
-<td>ios_software_rendimiento</td>
-<td>media</td>
+<td>5</td>
+<td>115712</td>
 <td>True</td>
-</tr>
-<tr>
-<th>5</th>
-<td>@AppleSupport since yesterdays update, my phone is dying of glitch...</td>
-<td>falla</td>
-<td>ios_software_rendimiento</td>
-<td>critica</td>
-<td>False</td>
-</tr>
-<tr>
-<th>6</th>
-<td>@AppleSupport extremely frustrating (and coincidental??) that my p...</td>
-<td>falla</td>
-<td>ios_software_rendimiento</td>
-<td>media</td>
-<td>True</td>
-</tr>
-<tr>
-<th>7</th>
-<td>@AppleSupport It‘s fallen down and then stopped working</td>
-<td>falla</td>
-<td>hardware_dispositivo</td>
-<td>critica</td>
-<td>False</td>
-</tr>
-<tr>
-<th>8</th>
-<td>Hey @AppleSupport the iOS update is ruining my Apple iPhone experi...</td>
-<td>falla</td>
-<td>ios_software_rendimiento</td>
-<td>media</td>
-<td>False</td>
-</tr>
-<tr>
-<th>9</th>
-<td>@AppleSupport No. And it also isn't allowing me to do the new quic...</td>
-<td>falla</td>
-<td>apps_funciones</td>
-<td>media</td>
-<td>False</td>
-</tr>
-<tr>
-<th>10</th>
-<td>@AppleSupport How do I restart my iPhone?</td>
-<td>solicitud</td>
-<td>dispositivo_general</td>
-<td>baja</td>
-<td>False</td>
-</tr>
-<tr>
-<th>11</th>
-<td>@AppleSupport how to change my apple id password</td>
-<td>solicitud</td>
-<td>cuenta_icloud</td>
-<td>baja</td>
-<td>False</td>
-</tr>
-<tr>
-<th>12</th>
-<td>@AppleSupport I was charged twice for my subscription</td>
-<td>falla</td>
-<td>pagos_facturacion</td>
-<td>critica</td>
-<td>False</td>
-</tr>
-<tr>
-<th>13</th>
-<td>@AppleSupport thanks for the help!</td>
-<td>otro</td>
-<td>otros</td>
-<td>baja</td>
-<td>False</td>
+<td>Tue Oct 31 21:49:35 +0000 2017</td>
+<td>@sprintcare I did.</td>
+<td>4</td>
+<td>6</td>
 </tr>
 </tbody>
 </table>
@@ -8288,301 +8050,56 @@ a.anchor-link {
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=e947e821">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=0d3a0236">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="5.-Aplicar-las-reglas-a-todos-los-tweets-de-clientes">5. Aplicar las reglas a todos los tweets de clientes<a class="anchor-link" href="#5.-Aplicar-las-reglas-a-todos-los-tweets-de-clientes">¶</a></h2><p>Se leen los tweets de clientes del Parquet, se clasifican y se guarda el resultado completo (también en Parquet).</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=42ba0e4d">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [5]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-<div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="n">df</span> <span class="o">=</span> <span class="n">pq</span><span class="o">.</span><span class="n">read_table</span><span class="p">(</span><span class="n">IN</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">"tweet_id"</span><span class="p">,</span> <span class="s2">"rol"</span><span class="p">,</span> <span class="s2">"texto_limpio"</span><span class="p">])</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
-<span class="n">cl</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">df</span><span class="p">[</span><span class="s2">"rol"</span><span class="p">]</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="s2">"cliente"</span><span class="p">)]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-<span class="k">del</span> <span class="n">df</span>
-<span class="n">cl</span> <span class="o">=</span> <span class="n">clasificar</span><span class="p">(</span><span class="n">cl</span><span class="p">)</span>
-
-<span class="n">OUT</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="n">cl</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="n">OUT</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">engine</span><span class="o">=</span><span class="s2">"pyarrow"</span><span class="p">,</span> <span class="n">compression</span><span class="o">=</span><span class="s2">"snappy"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">"Tweets de clientes etiquetados:"</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">cl</span><span class="p">))</span>
-
-<span class="k">def</span><span class="w"> </span><span class="nf">distribucion</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">col</span><span class="p">):</span>
-    <span class="n">conteos</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">col</span><span class="p">]</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">dropna</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"count"</span><span class="p">:</span> <span class="n">conteos</span><span class="p">,</span> <span class="s2">"pct"</span><span class="p">:</span> <span class="p">(</span><span class="n">conteos</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">))</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">3</span><span class="p">)})</span>
-
-<span class="n">distribucion</span><span class="p">(</span><span class="n">cl</span><span class="p">,</span> <span class="s2">"intencion"</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Tweets de clientes etiquetados: 126113
-</pre>
-</div>
-</div>
-<div class="jp-OutputArea-child jp-OutputArea-executeResult">
-<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[5]:</div>
-<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
-<div>
-<style scoped="">
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
-<table border="1" class="dataframe">
-<thead>
-<tr style="text-align: right;">
-<th></th>
-<th>count</th>
-<th>pct</th>
-</tr>
-<tr>
-<th>intencion</th>
-<th></th>
-<th></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<th>falla</th>
-<td>63485</td>
-<td>0.503</td>
-</tr>
-<tr>
-<th>otro</th>
-<td>41764</td>
-<td>0.331</td>
-</tr>
-<tr>
-<th>solicitud</th>
-<td>20864</td>
-<td>0.165</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=d9548878">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="6.-Distribuciones-(tablas-para-Resultados)">6. Distribuciones (tablas para Resultados)<a class="anchor-link" href="#6.-Distribuciones-(tablas-para-Resultados)">¶</a></h2><p>La urgencia solo tiene sentido para las <strong>fallas</strong>, por eso se calcula sobre ese subconjunto. La tabla cruzada muestra qué categorías concentran los casos críticos.</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=d056e4f4">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [6]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-<div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="n">fallas</span> <span class="o">=</span> <span class="n">cl</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">cl</span><span class="p">[</span><span class="s2">"intencion"</span><span class="p">]</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="s2">"falla"</span><span class="p">)]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">"Urgencia (solo fallas):"</span><span class="p">)</span>
-<span class="n">display_urg</span> <span class="o">=</span> <span class="n">distribucion</span><span class="p">(</span><span class="n">fallas</span><span class="p">,</span> <span class="s2">"urgencia"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">display_urg</span><span class="p">,</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">"Categoría (solo fallas):"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">distribucion</span><span class="p">(</span><span class="n">fallas</span><span class="p">,</span> <span class="s2">"categoria"</span><span class="p">),</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
-<span class="n">pd</span><span class="o">.</span><span class="n">crosstab</span><span class="p">(</span><span class="n">fallas</span><span class="p">[</span><span class="s2">"categoria"</span><span class="p">],</span> <span class="n">fallas</span><span class="p">[</span><span class="s2">"urgencia"</span><span class="p">])</span>
-</pre></div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Urgencia (solo fallas):
-          count    pct
-urgencia              
-media     49969  0.787
-critica   11723  0.185
-baja       1793  0.028 
-
-Categoría (solo fallas):
-                          count    pct
-categoria                             
-ios_software_rendimiento  26165  0.412
-otros                     12702  0.200
-dispositivo_general        5747  0.091
-apps_funciones             5121  0.081
-hardware_dispositivo       3693  0.058
-cuenta_icloud              2534  0.040
-servicios_apple            2356  0.037
-conectividad               2201  0.035
-telefonia_llamadas         1517  0.024
-pagos_facturacion          1449  0.023 
-
-</pre>
-</div>
-</div>
-<div class="jp-OutputArea-child jp-OutputArea-executeResult">
-<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[6]:</div>
-<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
-<div>
-<style scoped="">
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
-<table border="1" class="dataframe">
-<thead>
-<tr style="text-align: right;">
-<th>urgencia</th>
-<th>baja</th>
-<th>critica</th>
-<th>media</th>
-</tr>
-<tr>
-<th>categoria</th>
-<th></th>
-<th></th>
-<th></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<th>apps_funciones</th>
-<td>128</td>
-<td>1014</td>
-<td>3979</td>
-</tr>
-<tr>
-<th>conectividad</th>
-<td>53</td>
-<td>440</td>
-<td>1708</td>
-</tr>
-<tr>
-<th>cuenta_icloud</th>
-<td>63</td>
-<td>822</td>
-<td>1649</td>
-</tr>
-<tr>
-<th>dispositivo_general</th>
-<td>292</td>
-<td>1035</td>
-<td>4420</td>
-</tr>
-<tr>
-<th>hardware_dispositivo</th>
-<td>88</td>
-<td>702</td>
-<td>2903</td>
-</tr>
-<tr>
-<th>ios_software_rendimiento</th>
-<td>381</td>
-<td>4901</td>
-<td>20883</td>
-</tr>
-<tr>
-<th>otros</th>
-<td>682</td>
-<td>1532</td>
-<td>10488</td>
-</tr>
-<tr>
-<th>pagos_facturacion</th>
-<td>25</td>
-<td>314</td>
-<td>1110</td>
-</tr>
-<tr>
-<th>servicios_apple</th>
-<td>63</td>
-<td>423</td>
-<td>1870</td>
-</tr>
-<tr>
-<th>telefonia_llamadas</th>
-<td>18</td>
-<td>540</td>
-<td>959</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=49717fcf">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="7.-%C2%BFLas-categor%C3%ADas-est%C3%A1n-completas?-C%C3%B3mo-comprobarlo">7. ¿Las categorías están completas? Cómo comprobarlo<a class="anchor-link" href="#7.-%C2%BFLas-categor%C3%ADas-est%C3%A1n-completas?-C%C3%B3mo-comprobarlo">¶</a></h2><p>Las categorías son una hipótesis tuya y los datos pueden contradecirla. Dos revisiones:</p>
+<h2 id="3.-Selecci%C3%B3n-y-filtrado-de-@AppleSupport">3. Selección y filtrado de <code>@AppleSupport</code><a class="anchor-link" href="#3.-Selecci%C3%B3n-y-filtrado-de-@AppleSupport">¶</a></h2><p>Construimos dos subconjuntos y los unimos con <code>unionByName</code>:</p>
 <ol>
-<li><strong>Cobertura:</strong> qué porcentaje de las fallas quedó en <code>otros</code> o <code>dispositivo_general</code> (es decir, sin tema identificado). Como guía práctica, conviene que sea bajo (por ejemplo &lt; 15-20 %).</li>
-<li><strong>Palabras frecuentes en esas fallas sin tema:</strong> si aparece una palabra repetida (por ejemplo <code>homepod</code>, <code>carplay</code>), probablemente merece su categoría o entrar a una existente.</li>
+<li><strong>Respuestas de Apple:</strong> <code>author_id == "AppleSupport"</code>.</li>
+<li><strong>Tweets de clientes dirigidos a Apple:</strong> tweets entrantes (<code>inbound == "true"</code>) que mencionan a <code>@AppleSupport</code> o a los que Apple respondió (identificados mediante un <code>left_semi</code> join).</li>
 </ol>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=dad14270">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=050f9466">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [7]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [17]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="n">sin_tema</span> <span class="o">=</span> <span class="n">fallas</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">fallas</span><span class="p">[</span><span class="s2">"categoria"</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">([</span><span class="s2">"otros"</span><span class="p">,</span> <span class="s2">"dispositivo_general"</span><span class="p">])]</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Fallas sin tema identificado: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">sin_tema</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nb">len</span><span class="p">(</span><span class="n">fallas</span><span class="p">)</span><span class="si">:</span><span class="s2">.1%</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># ============================================================</span>
+<span class="c1"># 3. FILTRO DE LA CONVERSACIÓN DE @AppleSupport</span>
+<span class="c1"># ============================================================</span>
+<span class="n">apple</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">df_crudo</span>
+    <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"author_id"</span><span class="p">)</span> <span class="o">==</span> <span class="n">BRAND</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">"rol"</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">lit</span><span class="p">(</span><span class="s2">"apple"</span><span class="p">))</span>
+<span class="p">)</span>
 
-<span class="n">vec</span> <span class="o">=</span> <span class="n">CountVectorizer</span><span class="p">(</span><span class="n">stop_words</span><span class="o">=</span><span class="s2">"english"</span><span class="p">,</span> <span class="n">token_pattern</span><span class="o">=</span><span class="sa">r</span><span class="s2">"(?u)\b[a-zA-Z']{3,}\b"</span><span class="p">)</span>
-<span class="n">matriz</span> <span class="o">=</span> <span class="n">vec</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">sin_tema</span><span class="p">[</span><span class="s2">"texto_limpio"</span><span class="p">]</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
-<span class="n">conteos</span> <span class="o">=</span> <span class="n">matriz</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">A1</span>
-<span class="n">palabras</span> <span class="o">=</span> <span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"palabra"</span><span class="p">:</span> <span class="n">vec</span><span class="o">.</span><span class="n">get_feature_names_out</span><span class="p">(),</span> <span class="s2">"count"</span><span class="p">:</span> <span class="n">conteos</span><span class="p">})</span>
-            <span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s2">"count"</span><span class="p">,</span> <span class="n">ascending</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">40</span><span class="p">))</span>
-<span class="n">palabras</span>
+<span class="n">respondidos</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">apple</span>
+    <span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"in_response_to_tweet_id"</span><span class="p">)</span><span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="s2">"tweet_id"</span><span class="p">))</span>
+    <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"tweet_id"</span><span class="p">)</span><span class="o">.</span><span class="n">isNotNull</span><span class="p">())</span>
+    <span class="o">.</span><span class="n">distinct</span><span class="p">()</span>
+<span class="p">)</span>
+
+<span class="n">clientes</span> <span class="o">=</span> <span class="n">df_crudo</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">lower</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"inbound"</span><span class="p">))</span> <span class="o">==</span> <span class="s2">"true"</span><span class="p">)</span>
+<span class="n">menciona</span> <span class="o">=</span> <span class="n">clientes</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"text"</span><span class="p">)</span><span class="o">.</span><span class="n">rlike</span><span class="p">(</span><span class="s2">"(?i)@applesupport"</span><span class="p">))</span>
+<span class="n">contestados</span> <span class="o">=</span> <span class="n">clientes</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">respondidos</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="s2">"tweet_id"</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">"left_semi"</span><span class="p">)</span>
+
+<span class="n">clientes_apple</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">menciona</span><span class="o">.</span><span class="n">unionByName</span><span class="p">(</span><span class="n">contestados</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">"rol"</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">lit</span><span class="p">(</span><span class="s2">"cliente"</span><span class="p">))</span>
+<span class="p">)</span>
+
+<span class="n">filtrado</span> <span class="o">=</span> <span class="n">apple</span><span class="o">.</span><span class="n">unionByName</span><span class="p">(</span><span class="n">clientes_apple</span><span class="p">)</span>
+<span class="n">conteo</span><span class="p">[</span><span class="s2">"tras_filtro_apple"</span><span class="p">]</span> <span class="o">=</span> <span class="n">filtrado</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Registros tras filtro AppleSupport:"</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">conteo</span><span class="p">[</span><span class="s1">'tras_filtro_apple'</span><span class="p">]</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -8595,266 +8112,53 @@ pagos_facturacion          1449  0.023
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Fallas sin tema identificado: 29.1%
+<pre>Registros tras filtro AppleSupport: 311,379
 </pre>
 </div>
 </div>
-<div class="jp-OutputArea-child jp-OutputArea-executeResult">
-<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[7]:</div>
-<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
-<div>
-<style scoped="">
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
-<table border="1" class="dataframe">
-<thead>
-<tr style="text-align: right;">
-<th></th>
-<th>palabra</th>
-<th>count</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<th>479</th>
-<td>applesupport</td>
-<td>12347</td>
-</tr>
-<tr>
-<th>8878</th>
-<td>user</td>
-<td>10791</td>
-</tr>
-<tr>
-<th>3074</th>
-<td>fix</td>
-<td>6483</td>
-</tr>
-<tr>
-<th>6063</th>
-<td>phone</td>
-<td>2742</td>
-</tr>
-<tr>
-<th>8863</th>
-<td>url</td>
-<td>2644</td>
-</tr>
-<tr>
-<th>4309</th>
-<td>iphone</td>
-<td>2203</td>
-</tr>
-<tr>
-<th>6374</th>
-<td>problem</td>
-<td>2093</td>
-</tr>
-<tr>
-<th>4378</th>
-<td>issue</td>
-<td>2000</td>
-</tr>
-<tr>
-<th>1230</th>
-<td>can't</td>
-<td>1900</td>
-</tr>
-<tr>
-<th>4386</th>
-<td>it's</td>
-<td>1697</td>
-</tr>
-<tr>
-<th>3978</th>
-<td>i'm</td>
-<td>1535</td>
-</tr>
-<tr>
-<th>7456</th>
-<td>shit</td>
-<td>1530</td>
-</tr>
-<tr>
-<th>4490</th>
-<td>just</td>
-<td>1374</td>
-</tr>
-<tr>
-<th>436</th>
-<td>apple</td>
-<td>1298</td>
-</tr>
-<tr>
-<th>4718</th>
-<td>letter</td>
-<td>1124</td>
-</tr>
-<tr>
-<th>3782</th>
-<td>help</td>
-<td>1099</td>
-</tr>
-<tr>
-<th>9306</th>
-<td>work</td>
-<td>1051</td>
-</tr>
-<tr>
-<th>9380</th>
-<td>y'all</td>
-<td>1037</td>
-</tr>
-<tr>
-<th>8670</th>
-<td>type</td>
-<td>909</td>
-</tr>
-<tr>
-<th>373</th>
-<td>annoying</td>
-<td>891</td>
-</tr>
-<tr>
-<th>3078</th>
-<td>fixed</td>
-<td>882</td>
-</tr>
-<tr>
-<th>4758</th>
-<td>like</td>
-<td>834</td>
-</tr>
-<tr>
-<th>9314</th>
-<td>working</td>
-<td>825</td>
-</tr>
-<tr>
-<th>6557</th>
-<td>question</td>
-<td>808</td>
-</tr>
-<tr>
-<th>5471</th>
-<td>need</td>
-<td>795</td>
-</tr>
-<tr>
-<th>3488</th>
-<td>going</td>
-<td>795</td>
-</tr>
-<tr>
-<th>8411</th>
-<td>time</td>
-<td>751</td>
-</tr>
-<tr>
-<th>5505</th>
-<td>new</td>
-<td>741</td>
-</tr>
-<tr>
-<th>2418</th>
-<td>don't</td>
-<td>706</td>
-</tr>
-<tr>
-<th>3707</th>
-<td>having</td>
-<td>698</td>
-</tr>
-<tr>
-<th>3806</th>
-<td>hey</td>
-<td>693</td>
-</tr>
-<tr>
-<th>2402</th>
-<td>doesn't</td>
-<td>662</td>
-</tr>
-<tr>
-<th>8306</th>
-<td>thanks</td>
-<td>655</td>
-</tr>
-<tr>
-<th>4509</th>
-<td>keeps</td>
-<td>635</td>
-</tr>
-<tr>
-<th>9288</th>
-<td>won't</td>
-<td>621</td>
-</tr>
-<tr>
-<th>3981</th>
-<td>i've</td>
-<td>614</td>
-</tr>
-<tr>
-<th>5028</th>
-<td>mark</td>
-<td>599</td>
-</tr>
-<tr>
-<th>8337</th>
-<td>thing</td>
-<td>571</td>
-</tr>
-<tr>
-<th>3431</th>
-<td>getting</td>
-<td>531</td>
-</tr>
-<tr>
-<th>4380</th>
-<td>issues</td>
-<td>523</td>
-</tr>
-</tbody>
-</table>
 </div>
 </div>
 </div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=6b25bf24">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=edfb3419">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="8.-Ver-ejemplos-de-cada-etiqueta">8. Ver ejemplos de cada etiqueta<a class="anchor-link" href="#8.-Ver-ejemplos-de-cada-etiqueta">¶</a></h2><p>Antes de etiquetar a mano, lee ejemplos por urgencia para decidir si las definiciones tienen sentido. Cambia <code>nivel</code> para ver los otros. También puedes cambiar el filtro para revisar una categoría concreta.</p>
+<h2 id="4.-Depuraci%C3%B3n-y-construcci%C3%B3n-temporal">4. Depuración y construcción temporal<a class="anchor-link" href="#4.-Depuraci%C3%B3n-y-construcci%C3%B3n-temporal">¶</a></h2><p>Eliminamos duplicados por <code>tweet_id</code>, descartamos textos vacíos o nulos y convertimos <code>created_at</code> a timestamp probando los formatos del dataset.</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=d0b81786">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=f48989c4">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [8]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [18]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="n">nivel</span> <span class="o">=</span> <span class="s2">"critica"</span>   <span class="c1"># prueba: "media", "baja"</span>
-<span class="n">pd</span><span class="o">.</span><span class="n">set_option</span><span class="p">(</span><span class="s2">"display.max_colwidth"</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
-<span class="p">(</span><span class="n">cl</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">cl</span><span class="p">[</span><span class="s2">"urgencia"</span><span class="p">]</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="n">nivel</span><span class="p">),</span> <span class="p">[</span><span class="s2">"texto_limpio"</span><span class="p">,</span> <span class="s2">"categoria"</span><span class="p">,</span> <span class="s2">"frustracion"</span><span class="p">]]</span>
-   <span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="mi">15</span><span class="p">,</span> <span class="n">cl</span><span class="p">[</span><span class="s2">"urgencia"</span><span class="p">]</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="n">nivel</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">3</span><span class="p">))</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># ============================================================</span>
+<span class="c1"># 4. DEPURACIÓN Y DIMENSIÓN TEMPORAL</span>
+<span class="c1"># ============================================================</span>
+<span class="n">d</span> <span class="o">=</span> <span class="n">filtrado</span><span class="o">.</span><span class="n">dropDuplicates</span><span class="p">([</span><span class="s2">"tweet_id"</span><span class="p">])</span>
+<span class="n">conteo</span><span class="p">[</span><span class="s2">"tras_quitar_duplicados"</span><span class="p">]</span> <span class="o">=</span> <span class="n">d</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
+
+<span class="n">d</span> <span class="o">=</span> <span class="n">d</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"text"</span><span class="p">)</span><span class="o">.</span><span class="n">isNotNull</span><span class="p">()</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">trim</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"text"</span><span class="p">))</span> <span class="o">!=</span> <span class="s2">""</span><span class="p">))</span>
+<span class="n">conteo</span><span class="p">[</span><span class="s2">"tras_quitar_vacios"</span><span class="p">]</span> <span class="o">=</span> <span class="n">d</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
+
+<span class="n">col_fecha</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"created_at"</span><span class="p">)</span>
+<span class="n">d</span> <span class="o">=</span> <span class="n">d</span><span class="o">.</span><span class="n">withColumn</span><span class="p">(</span>
+    <span class="s2">"fecha"</span><span class="p">,</span>
+    <span class="n">F</span><span class="o">.</span><span class="n">coalesce</span><span class="p">(</span>
+        <span class="n">F</span><span class="o">.</span><span class="n">to_timestamp</span><span class="p">(</span><span class="n">col_fecha</span><span class="p">,</span> <span class="s2">"EEE MMM dd HH:mm:ss Z yyyy"</span><span class="p">),</span>
+        <span class="n">F</span><span class="o">.</span><span class="n">to_timestamp</span><span class="p">(</span><span class="n">col_fecha</span><span class="p">,</span> <span class="s2">"dd/MM/yyyy HH:mm:ss"</span><span class="p">),</span>
+        <span class="n">F</span><span class="o">.</span><span class="n">to_timestamp</span><span class="p">(</span><span class="n">col_fecha</span><span class="p">)</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">conteo</span><span class="p">[</span><span class="s2">"fechas_invalidas"</span><span class="p">]</span> <span class="o">=</span> <span class="n">d</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"fecha"</span><span class="p">)</span><span class="o">.</span><span class="n">isNull</span><span class="p">())</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
+<span class="n">d</span> <span class="o">=</span> <span class="n">d</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"fecha"</span><span class="p">)</span><span class="o">.</span><span class="n">isNotNull</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Registros válidos con fecha:"</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">d</span><span class="o">.</span><span class="n">count</span><span class="p">()</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -8864,9 +8168,80 @@ pagos_facturacion          1449  0.023
 <div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
 </div>
 <div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child jp-OutputArea-executeResult">
-<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[8]:</div>
-<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Registros válidos con fecha: 232,973
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=6b15ecaa">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="5.-Normalizaci%C3%B3n-del-texto-y-persistencia">5. Normalización del texto y persistencia<a class="anchor-link" href="#5.-Normalizaci%C3%B3n-del-texto-y-persistencia">¶</a></h2><p>Creamos <code>texto_limpio</code> con funciones nativas de Spark (<code>F.regexp_replace</code>, <code>F.trim</code>, <code>F.size</code>, <code>F.split</code>) y persistimos el DataFrame con <code>StorageLevel.MEMORY_AND_DISK</code> para reutilizarlo en las validaciones y en la exportación final.</p>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=3c77817e">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [19]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># ============================================================</span>
+<span class="c1"># 5. NORMALIZACIÓN DEL TEXTO Y PERSISTENCIA</span>
+<span class="c1"># ============================================================</span>
+<span class="n">texto_norm</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">regexp_replace</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"text"</span><span class="p">),</span> <span class="s2">"[’‘`]"</span><span class="p">,</span> <span class="s2">"'"</span><span class="p">)</span>
+<span class="n">texto_norm</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">regexp_replace</span><span class="p">(</span><span class="n">texto_norm</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"https?://\S+"</span><span class="p">,</span> <span class="s2">"&lt;URL&gt;"</span><span class="p">)</span>
+<span class="n">texto_norm</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">regexp_replace</span><span class="p">(</span><span class="n">texto_norm</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"@(?!(?i:applesupport)?)\w+"</span><span class="p">,</span> <span class="s2">"@USER"</span><span class="p">)</span>
+<span class="n">texto_norm</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">trim</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">regexp_replace</span><span class="p">(</span><span class="n">texto_norm</span><span class="p">,</span> <span class="sa">r</span><span class="s2">"\s+"</span><span class="p">,</span> <span class="s2">" "</span><span class="p">))</span>
+
+<span class="n">dataset_preparado</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">d</span>
+    <span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">"texto_limpio"</span><span class="p">,</span> <span class="n">texto_norm</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">withColumn</span><span class="p">(</span><span class="s2">"n_palabras"</span><span class="p">,</span> <span class="n">F</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s2">"texto_limpio"</span><span class="p">),</span> <span class="s2">" "</span><span class="p">)))</span>
+    <span class="o">.</span><span class="n">select</span><span class="p">(</span>
+        <span class="s2">"tweet_id"</span><span class="p">,</span>
+        <span class="s2">"rol"</span><span class="p">,</span>
+        <span class="s2">"author_id"</span><span class="p">,</span>
+        <span class="s2">"fecha"</span><span class="p">,</span>
+        <span class="s2">"text"</span><span class="p">,</span>
+        <span class="s2">"texto_limpio"</span><span class="p">,</span>
+        <span class="s2">"n_palabras"</span><span class="p">,</span>
+        <span class="s2">"in_response_to_tweet_id"</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">dataset_preparado</span><span class="o">.</span><span class="n">persist</span><span class="p">(</span><span class="n">StorageLevel</span><span class="o">.</span><span class="n">MEMORY_AND_DISK</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Registros preparados en caché:"</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">dataset_preparado</span><span class="o">.</span><span class="n">count</span><span class="p">()</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="n">display</span><span class="p">(</span><span class="n">dataset_preparado</span><span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">toPandas</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Registros preparados en caché: 232,973
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
 <div>
 <style scoped="">
     .dataframe tbody tr th:only-of-type {
@@ -8885,101 +8260,248 @@ pagos_facturacion          1449  0.023
 <thead>
 <tr style="text-align: right;">
 <th></th>
+<th>tweet_id</th>
+<th>rol</th>
+<th>author_id</th>
+<th>fecha</th>
+<th>text</th>
 <th>texto_limpio</th>
-<th>categoria</th>
-<th>frustracion</th>
+<th>n_palabras</th>
+<th>in_response_to_tweet_id</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<th>217944</th>
-<td>@AppleSupport @USER Me think it's a worldwide problem here, @AppleSupport still wondering where the fix is. (Me has to speak like this so me don't get A ?)</td>
-<td>otros</td>
-<td>False</td>
+<th>0</th>
+<td>1000003</td>
+<td>cliente</td>
+<td>497667</td>
+<td>2017-11-05 05:33:26</td>
+<td>@AppleSupport  https://t.co/OnHabGwPo7</td>
+<td>@USER &lt;URL&gt;</td>
+<td>2</td>
+<td>999856</td>
 </tr>
 <tr>
-<th>176834</th>
-<td>@AppleSupport Since this morning. I have an Apple leather case. No drops or breaks. I tried restarting the phone and cleaning the lens with a Qtip. I don't see any debris.</td>
-<td>dispositivo_general</td>
-<td>False</td>
+<th>1</th>
+<td>1000023</td>
+<td>apple</td>
+<td>AppleSupport</td>
+<td>2017-11-03 16:45:53</td>
+<td>@356755 We'd be happy to look this over with y...</td>
+<td>@USER We'd be happy to look this over with you...</td>
+<td>24</td>
+<td>1000024</td>
 </tr>
 <tr>
-<th>93719</th>
-<td>@USER @AppleSupport enough of this stupid I️ symbol. What is wrong with you? Everyone is complaining. Fix the glitch already!</td>
-<td>ios_software_rendimiento</td>
-<td>False</td>
+<th>2</th>
+<td>1000077</td>
+<td>apple</td>
+<td>AppleSupport</td>
+<td>2017-11-03 16:57:27</td>
+<td>@356765 We're here to help. What happens when ...</td>
+<td>@USER We're here to help. What happens when yo...</td>
+<td>28</td>
+<td>1000078</td>
 </tr>
 <tr>
-<th>145118</th>
-<td>Panchodo kutteyo kusreyo bastaaro my battery dies so quickly since the update @USER</td>
-<td>ios_software_rendimiento</td>
-<td>False</td>
+<th>3</th>
+<td>1000092</td>
+<td>cliente</td>
+<td>356770</td>
+<td>2017-11-03 12:52:55</td>
+<td>@AppleSupport your c/s sucks, I was just disco...</td>
+<td>@USER your c/s sucks, I was just disconnected ...</td>
+<td>15</td>
+<td>NaN</td>
 </tr>
 <tr>
-<th>227641</th>
-<td>@AppleSupport When my iPhone is connected to my car via bluetooth, I can't use Siri (the mic will not pick me up), so I have to do that little dance every time and tell Siri to use the phone mic. ...</td>
-<td>servicios_apple</td>
-<td>False</td>
+<th>4</th>
+<td>1000186</td>
+<td>cliente</td>
+<td>356792</td>
+<td>2017-11-03 12:43:38</td>
+<td>@115858 @AppleSupport  y’all need to fix this ...</td>
+<td>@USER @USER y'all need to fix this fr I️ shoul...</td>
+<td>16</td>
+<td>NaN</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=a797981d">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [20]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Ver datos de fecha que contiene 2016</span>
+<span class="c1"># Ver datos con fecha en 2016</span>
+<span class="n">dataset_preparado</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">year</span><span class="p">(</span><span class="s2">"fecha"</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2016</span><span class="p">)</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">truncate</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>+--------+-------+------------+-------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------+----------+-----------------------+
+|tweet_id|rol    |author_id   |fecha              |text                                                                                                                                                                |texto_limpio                                                                                                                              |n_palabras|in_response_to_tweet_id|
++--------+-------+------------+-------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------+----------+-----------------------+
+|1254076 |cliente|414170      |2016-09-30 21:36:50|@AppleSupport oh wow!! I didn't know the phone could tell how hard I was pushing down. That's amazing, thanks!                                                      |@USER oh wow!! I didn't know the phone could tell how hard I was pushing down. That's amazing, thanks!                                    |19        |1254073                |
+|1254077 |cliente|414170      |2016-09-30 21:04:23|@AppleSupport iPhone 7, 10.0.2                                                                                                                                      |@USER iPhone 7, 10.0.2                                                                                                                    |4         |1254081                |
+|2840102 |cliente|790357      |2016-04-04 18:04:17|@AppleSupport i was just wondering how you get rid of the padlock icon at the top right of the screen? https://t.co/8YQiB4R4sl                                      |@USER i was just wondering how you get rid of the padlock icon at the top right of the screen? &lt;URL&gt;                                      |21        |2840101                |
+|2512288 |cliente|715999      |2016-11-08 16:52:54|Anyone else getting the voice control bug on ios10? It's driving me insane! #ios10bugs #voicecontrolbug @applesupport                                               |Anyone else getting the voice control bug on ios10? It's driving me insane! #ios10bugs #voicecontrolbug @USER                             |16        |NULL                   |
+|1254073 |apple  |AppleSupport|2016-09-30 21:34:28|@52822 In iOS 10, touch and hold the app lightly until it wiggles. If the app doesn't wiggle, make sure that you're not pressing too hard.                          |@USER In iOS 10, touch and hold the app lightly until it wiggles. If the app doesn't wiggle, make sure that you're not pressing too hard. |26        |1254077                |
+|1254082 |cliente|414170      |2016-09-30 20:54:03|@AppleSupport how do I delete apps if this is what shows when I press and hold an app https://t.co/R47Tz6nsA7                                                       |@USER how do I delete apps if this is what shows when I press and hold an app &lt;URL&gt;                                                       |19        |NULL                   |
+|2833060 |apple  |AppleSupport|2016-03-03 07:00:08|Welcome to... https://t.co/EZA8eRycDs                                                                                                                               |Welcome to... &lt;URL&gt;                                                                                                                       |3         |NULL                   |
+|2058730 |apple  |AppleSupport|2016-11-06 08:59:31|@608890 We're happy to assist. This article can help you to unlock your account: https://t.co/HH37urdbz9 DM us with any questions. https://t.co/GDrqU22YpT          |@USER We're happy to assist. This article can help you to unlock your account: &lt;URL&gt; DM us with any questions. &lt;URL&gt;                      |21        |2058732                |
+|2507390 |cliente|714875      |2016-09-06 18:44:16|@AppleSupport ugh.. Help! My MacBook Air thinks I have a Bluetooth Keyboard and trackpad are frozen #applehelp https://t.co/9RzVI3XaFs                              |@USER ugh.. Help! My MacBook Air thinks I have a Bluetooth Keyboard and trackpad are frozen #applehelp &lt;URL&gt;                              |18        |NULL                   |
+|2921550 |apple  |AppleSupport|2016-10-06 08:44:00|@808566 We'll happy to work with you and answer your questions. Please DM us where we have more room. https://t.co/GDrqU22YpT                                       |@USER We'll happy to work with you and answer your questions. Please DM us where we have more room. &lt;URL&gt;                                 |20        |2921551                |
+|363663  |cliente|202183      |2016-03-03 19:19:41|@AppleSupport Howdy. Today I started getting a "No Sim Card Installed" message on my iPhone 6. I'm running 9.2.1\n???                                               |@USER Howdy. Today I started getting a "No Sim Card Installed" message on my iPhone 6. I'm running 9.2.1 ???                              |20        |NULL                   |
+|1254081 |apple  |AppleSupport|2016-09-30 21:03:26|@52822 We can take a look at it. Which device and what version of iOS are you currently using?                                                                      |@USER We can take a look at it. Which device and what version of iOS are you currently using?                                             |19        |1254082                |
+|1282405 |cliente|420011      |2016-12-25 13:07:10|@AppleSupport-last night my watch went completely dead for the first time. I put it on the charger overnight and I still only see this.#help https://t.co/4HewSFc7bO|@USER-last night my watch went completely dead for the first time. I put it on the charger overnight and I still only see this.#help &lt;URL&gt;|25        |NULL                   |
+|148093  |apple  |AppleSupport|2016-04-09 19:27:30|@149685 This will provide more information on the picture you are seeing: https://t.co/WIvZlsk5oQ DM us if you need additional help.                                |@USER This will provide more information on the picture you are seeing: &lt;URL&gt; DM us if you need additional help.                          |20        |148094                 |
+|2058732 |cliente|608890      |2016-11-06 01:35:52|@AppleSupport My icloud account has been locked for security reasons. Even my Apple ID is locked. I can't receive my confirmation code.                             |@USER My icloud account has been locked for security reasons. Even my Apple ID is locked. I can't receive my confirmation code.           |22        |NULL                   |
+|2840101 |apple  |AppleSupport|2016-04-04 18:03:31|@790357 We’re happy to help with your iPhone. DM us the model, iOS\n Version and the issue and we can go from there.                                                |@USER We're happy to help with your iPhone. DM us the model, iOS Version and the issue and we can go from there.                          |23        |2840103                |
+|2840103 |cliente|790357      |2016-04-04 17:46:28|@AppleSupport Awrite av got a problem with my iPhone                                                                                                                |@USER Awrite av got a problem with my iPhone                                                                                              |9         |NULL                   |
+|1254078 |apple  |AppleSupport|2016-09-30 21:47:26|@52822 We're so glad to have helped you.                                                                                                                            |@USER We're so glad to have helped you.                                                                                                   |8         |1254076                |
+|2921551 |cliente|808566      |2016-10-06 04:25:20|@AppleSupport Is family shared iCloud storage a functionality I can't find or is this something that doesn't exist (yet)?                                           |@USER Is family shared iCloud storage a functionality I can't find or is this something that doesn't exist (yet)?                         |19        |NULL                   |
+|363661  |apple  |AppleSupport|2016-03-04 14:44:00|@202183 We would love to help fix this. Follow these steps and DM us if you need further assistance: https://t.co/UTP2qBzCA0                                        |@USER We would love to help fix this. Follow these steps and DM us if you need further assistance: &lt;URL&gt;                                  |20        |363663                 |
++--------+-------+------------+-------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------+----------+-----------------------+
+
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=da20ef55">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="6.-Resumen-para-la-secci%C3%B3n-de-Resultados">6. Resumen para la sección de Resultados<a class="anchor-link" href="#6.-Resumen-para-la-secci%C3%B3n-de-Resultados">¶</a></h2><p>Documentamos cuántos tweets había al inicio, cuántos quedaron tras cada etapa y el desglose entre clientes y respuestas de Apple.</p>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=2973a6c7">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [21]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># ============================================================</span>
+<span class="c1"># 6. RESUMEN DE CONTEOS Y VALIDACIÓN</span>
+<span class="c1"># ============================================================</span>
+<span class="n">resumen_roles</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">dataset_preparado</span>
+    <span class="o">.</span><span class="n">groupBy</span><span class="p">(</span><span class="s2">"rol"</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">count</span><span class="p">()</span>
+    <span class="o">.</span><span class="n">toPandas</span><span class="p">()</span>
+    <span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s2">"rol"</span><span class="p">)[</span><span class="s2">"count"</span><span class="p">]</span>
+    <span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+<span class="p">)</span>
+
+<span class="n">rango_fechas</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">dataset_preparado</span>
+    <span class="o">.</span><span class="n">agg</span><span class="p">(</span>
+        <span class="n">F</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="s2">"fecha"</span><span class="p">)</span><span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="s2">"inicio"</span><span class="p">),</span>
+        <span class="n">F</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="s2">"fecha"</span><span class="p">)</span><span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="s2">"fin"</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="o">.</span><span class="n">collect</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+<span class="p">)</span>
+
+<span class="n">conteo</span><span class="p">[</span><span class="s2">"tweets_clientes"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">resumen_roles</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"cliente"</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+<span class="n">conteo</span><span class="p">[</span><span class="s2">"respuestas_apple"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">resumen_roles</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"apple"</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+<span class="n">conteo</span><span class="p">[</span><span class="s2">"fecha_inicio"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">rango_fechas</span><span class="p">[</span><span class="s2">"inicio"</span><span class="p">])</span>
+<span class="n">conteo</span><span class="p">[</span><span class="s2">"fecha_fin"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">rango_fechas</span><span class="p">[</span><span class="s2">"fin"</span><span class="p">])</span>
+
+<span class="n">df_resumen</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">conteo</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"valor"</span><span class="p">)</span><span class="o">.</span><span class="n">to_frame</span><span class="p">()</span>
+<span class="n">display</span><span class="p">(</span><span class="n">df_resumen</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>total_original</th>
+<td>2811774</td>
 </tr>
 <tr>
-<th>173490</th>
-<td>@AppleSupport hey apple i have been having this problem since yesterday please help &lt;URL&gt;</td>
-<td>otros</td>
-<td>False</td>
+<th>tras_filtro_apple</th>
+<td>311379</td>
 </tr>
 <tr>
-<th>10912</th>
-<td>@AppleSupport @applesupport - READ THE NEWS -- everyone is complaining about battery life. This isn't an issue that I am having. It's an issue period.</td>
-<td>hardware_dispositivo</td>
-<td>False</td>
+<th>tras_quitar_duplicados</th>
+<td>232973</td>
 </tr>
 <tr>
-<th>164478</th>
-<td>@AppleSupport can't call anyone or receive calls 🙄</td>
-<td>telefonia_llamadas</td>
-<td>False</td>
+<th>tras_quitar_vacios</th>
+<td>232973</td>
 </tr>
 <tr>
-<th>229523</th>
-<td>@AppleSupport howdy. My Apple Music hasn't been working the last few days, just keeps saying loading when I try to search for music or go into the browse section. Any idea what it could be? &lt;URL&gt;</td>
-<td>servicios_apple</td>
-<td>False</td>
+<th>fechas_invalidas</th>
+<td>0</td>
 </tr>
 <tr>
-<th>162775</th>
-<td>Trying to update some #apps on my @USER and im told my apple ID has been disabled....suggestions? @AppleSupport</td>
-<td>cuenta_icloud</td>
-<td>False</td>
+<th>tweets_clientes</th>
+<td>126113</td>
 </tr>
 <tr>
-<th>145872</th>
-<td>@AppleSupport charged my card three times and my Music is still not working</td>
-<td>pagos_facturacion</td>
-<td>False</td>
+<th>respuestas_apple</th>
+<td>106860</td>
 </tr>
 <tr>
-<th>105618</th>
-<td>@USER needs to add a grandparent mode to iOS. Three buttons: call grandkids, see photos of grandkids, and emergency help. 1/3</td>
-<td>telefonia_llamadas</td>
-<td>False</td>
+<th>fecha_inicio</th>
+<td>2016-03-03 07:00:08</td>
 </tr>
 <tr>
-<th>215681</th>
-<td>Hey @AppleSupport how come every time I️ try to type out I️'m it auto corrects it to an A with a ? It's happening to everyone, fix it.</td>
-<td>otros</td>
-<td>False</td>
-</tr>
-<tr>
-<th>17966</th>
-<td>@USER @AppleSupport Ok good! Ours are still down</td>
-<td>otros</td>
-<td>False</td>
-</tr>
-<tr>
-<th>113242</th>
-<td>@AppleSupport oh hey @AppleSupport how am i supposed to make a genius bar appt if i can't 2 factor authenticate my login since, oh, idk, MY PHONE WONT TURN ON</td>
-<td>cuenta_icloud</td>
-<td>False</td>
+<th>fecha_fin</th>
+<td>2017-12-03 17:12:28</td>
 </tr>
 </tbody>
 </table>
@@ -8989,43 +8511,39 @@ pagos_facturacion          1449  0.023
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=60885d3c">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=c0ca51d0">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="9.-Muestra-para-etiquetado-manual-(a-ciegas)">9. Muestra para etiquetado manual (a ciegas)<a class="anchor-link" href="#9.-Muestra-para-etiquetado-manual-(a-ciegas)">¶</a></h2><p>Se toma una muestra <strong>estratificada</strong>: hasta 40 tweets por combinación intención × urgencia, con selección aleatoria reproducible.</p>
-<p>Se generan <strong>dos</strong> archivos:</p>
-<ul>
-<li><code>muestra_para_etiquetar.csv</code>: solo <code>tweet_id</code>, texto y columnas vacías <code>*_manual</code>. <strong>No incluye la etiqueta de las reglas</strong>, para que no te influya.</li>
-<li><code>muestra_clave_reglas.csv</code>: los mismos tweets con la etiqueta automática; se usa en el paso 10.</li>
-</ul>
-<p>En <code>comentario_error</code> anota por qué un tweet es difícil o ambiguo; esos comentarios alimentan tu subsección de errores y aciertos.</p>
-<p><strong>Valores para etiquetar:</strong> intención <code>falla</code>/<code>solicitud</code>/<code>otro</code>; urgencia <code>baja</code>/<code>media</code>/<code>critica</code>; categoría, los nombres del catálogo, <code>dispositivo_general</code> u <code>otros</code>.</p>
+<h2 id="7.-Exploraci%C3%B3n-r%C3%A1pida">7. Exploración rápida<a class="anchor-link" href="#7.-Exploraci%C3%B3n-r%C3%A1pida">¶</a></h2><p>Estadísticos de longitud de palabras y serie diaria de volumen de tweets.</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=f925d657">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=9528050f">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [9]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [22]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="n">muestra</span> <span class="o">=</span> <span class="p">(</span><span class="n">cl</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">frac</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
-             <span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s2">"intencion"</span><span class="p">,</span> <span class="s2">"urgencia"</span><span class="p">],</span> <span class="n">group_keys</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-             <span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">40</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># ============================================================</span>
+<span class="c1"># 7. EXPLORACIÓN DE LONGITUD Y VOLUMEN DIARIO</span>
+<span class="c1"># ============================================================</span>
+<span class="n">dataset_preparado</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">"n_palabras"</span><span class="p">)</span><span class="o">.</span><span class="n">describe</span><span class="p">()</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 
-<span class="n">para_etiquetar</span> <span class="o">=</span> <span class="n">muestra</span><span class="p">[[</span><span class="s2">"tweet_id"</span><span class="p">,</span> <span class="s2">"texto_limpio"</span><span class="p">]]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-<span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">"intencion_manual"</span><span class="p">,</span> <span class="s2">"categoria_manual"</span><span class="p">,</span> <span class="s2">"urgencia_manual"</span><span class="p">,</span> <span class="s2">"comentario_error"</span><span class="p">]:</span>
-    <span class="n">para_etiquetar</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="o">=</span> <span class="s2">""</span>
-
-<span class="n">MUESTRA</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="n">para_etiquetar</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">MUESTRA</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8-sig"</span><span class="p">)</span>
-<span class="n">muestra</span><span class="p">[[</span><span class="s2">"tweet_id"</span><span class="p">,</span> <span class="s2">"intencion"</span><span class="p">,</span> <span class="s2">"categoria"</span><span class="p">,</span> <span class="s2">"urgencia"</span><span class="p">]]</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">CLAVE</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">muestra</span><span class="p">),</span> <span class="s2">"tweets en la muestra"</span><span class="p">)</span>
+<span class="n">por_dia</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">dataset_preparado</span>
+    <span class="o">.</span><span class="n">groupBy</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">to_date</span><span class="p">(</span><span class="s2">"fecha"</span><span class="p">)</span><span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="s2">"dia"</span><span class="p">))</span>
+    <span class="o">.</span><span class="n">count</span><span class="p">()</span>
+    <span class="o">.</span><span class="n">orderBy</span><span class="p">(</span><span class="s2">"dia"</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">toPandas</span><span class="p">()</span>
+<span class="p">)</span>
+<span class="n">por_dia</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s2">"dia"</span><span class="p">)[</span><span class="s2">"count"</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">title</span><span class="o">=</span><span class="s2">"Tweets por día (@AppleSupport)"</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -9038,44 +8556,67 @@ pagos_facturacion          1449  0.023
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>200 tweets en la muestra
+<pre>+-------+-----------------+
+|summary|       n_palabras|
++-------+-----------------+
+|  count|           232973|
+|   mean|20.37012014267748|
+| stddev|9.259212279520792|
+|    min|                1|
+|    max|               94|
++-------+-----------------+
+
 </pre>
 </div>
 </div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedImage jp-OutputArea-output" tabindex="0">
+<img alt="No description has been provided for this image" class="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA90AAAEiCAYAAADklbFjAAAAOnRFWHRTb2Z0d2FyZQBNYXRwbG90bGliIHZlcnNpb24zLjExLjIsIGh0dHBzOi8vbWF0cGxvdGxpYi5vcmcvgI3uAAAAAAlwSFlzAAAPYQAAD2EBqD+naQAAT7dJREFUeJzt3QecE2X6wPFn+7LLLr33JnYBKSr2cuop6oFiPcXe8CyoJ3rW8w6V8+5QT6wndgXbiQoqIih65x8FCyhIZylLh1122T7/z/MmEybZJJvsJrspvy+fkE0ymZnMpMwzz/s+b4plWZYAAAAAAICIS438LAEAAAAAAEE3AAAAAABRRKYbAAAAAIAoIegGAAAAACBKCLoBAAAAAIgSgm4AAAAAAKKEoBsAAAAAgCgh6AYAAAAAIEoIugEAAAAAiBKCbgAAGkFhYaF06tRJrr32WrY3AABJhKAbAIAIeuqppyQlJUVWr17tua+qqkrOPfdcGT58uPzrX/+K2LImTJggffr0MfNPRH/605/MtkTD3X333XLggQdKdXU1mxMAGhlBNwDEcWAXymXr1q1Nuq633nqrpKenSzL74x//aPbFq6++Kqmpkfnp3bRpkwm677333oDbt6amRl5//XX53e9+J126dJGsrCzp2LGjHHfccSb4Ly0trXM5Dz/8sFn3Aw44QOLNp59+Kqeccop57Tk5ObL//vvLNddcI99//70komCftXHjxsn69evlmWeeafT1AoBkR9ANAHFIAwfLsjyXyspKc/+oUaO87tdL27Ztm3p1k96jjz4qc+bMMUFvpDz++ONmfueff77fx5cvXy6DBg2SSZMmydlnny3ffPON7N69W3744Qe5+eab5cMPPzSB9Lx584Iu5/nnn5euXbvKzz//LF9//XXc7Munn35afvOb30j37t1l7ty5sn37dnnhhRdkxYoVcthhh0myadmypVx44YXmJIqejAEANB6CbgAA4ow2J9dgWJusZ2Rk1Hr8119/NYHlyJEj5b///a8JtjRw1mk7dOggZ5xxhnz00Udy//33y2mnnSZfffWV3+XoiYJly5bJc889Z4LXZ599VuLFX/7yF9l3331N8N23b1/Jzs6WYcOGySeffGKyvsnooosukjVr1siMGTOaelUAIKkQdANAAtLAQpsEf/HFF577NNOp9/Xu3dtr2iuvvFLatWtnsuI2zWqOHj3a3J+ZmWmCl3/84x9e04QynWZYNcur/UidTd41C6u037MGhHbzX828PvDAA1JSUhL09Y0dO1aaN28uO3fuNM9v0aKFtGrVSi655BK/zek1eDz++OMlLy/PLGfo0KEybdo0v/MsKiqSyy67TNq0aSP9+vULuh7vvfeeHHLIISag69+/v2k+Hmrf5CeeeMJrm+Tn58vRRx9tMtB1mT9/vinMpq/Jl25r3e5XXXWV3HPPPUH7RF988cWmifoFF1wg5eXltR7XIHufffYxGWOd39SpU832acj+CHff+RPK+1Mz2507d671+vW2BuROZ511lpmHL3sfrVu3rlFea0Pep3V91pTOT5/7/vvvh7SdAQCRQdANAAnoqKOOMoHgxx9/7Llv1qxZ0qxZM1m1apXXgbjef8IJJ3iCk++++84cnO/Zs8cEAdu2bZO//vWvJhi+7bbbPM8LZbq33nrLZBXT0tK8mrxr5lH99re/lYKCAvnss89kx44d8s4775j733333ZBep1YC1+bVOg8NgD///HMTIFZUVHim0azeiSeeaAL7n376SVauXGlua9D25JNP+m26r0GYbqPx48cHXLYGLppJPvLII808dTtqM+aZM2eGtO4aPNnbQwOlRYsWyZAhQ8yyNagOxm4SPnjw4FqPaR/u4uJiue+++8xt7Xqgr6Nbt24mkNPXrk2MtW+3/Xp1/+i+crL3h25jfW9cccUVJsP+2muvNWh/1Gdap1Dfn7pfdDt98MEHEg2Rfq0NfZ/W9VlTWk/g0EMP9ToZBwBoBBYAIO5VVlZqis8aNWqU574TTjjBGjx4sOf2McccY1199dVW69atrSeffNLct2zZMvO85557zjPd4YcfbvXu3dsqKyvzWsY///lPKy0tzSooKAhrunHjxpnbvgoLC82yn3766bBf7/XXX2+e+8ILL3jdP3PmTHP/v//9b899+++/v9WvXz+rqqrKa9qTTz7Zys/Pt0pKSrzm+fzzz4e0Dvvtt581YMAAr/tqamrM8nQ+q1at8tx/1113mftC0bdvX+uaa64JOs3YsWPN/CoqKmo9dtppp1n33nuv57Zu/65du1rz5s2ziouLrTfffNPKzs62OnTo4Jnmqquusq688kqv+UyaNMnKycmxduzY4bnvvPPOswYNGtSg/RHOtP62W6jvu9WrV5v3vz6/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XrotCwoKar13fPen/m7rtM8//3zQ9axr+Q2ZdyJ68803zWdFj40OOOAA8zs6ceLEWtPp97Lz2OTyyy+3qqurPY/rPrzuuuvM+yIjI8OaMGFCrXncdNNNtba9Hkcdd9xxQdcxlHmHso7JQo8dzjzzTPN9OWDAALNPTz/9dGv79u214g49ltV9b//mLl++3GsaPcbR94d+j+v7w58HH3zQ/Bbq94J+5vRz/fLLL9e5npFafl0IuuOAvonWrFnjua1vIA2anQdOepClb2YNsJQ+ph/0V1991TPNBx98YKbTHyx9zF/QrW8yfcPeddddJpBWP/30kzV37tyg6xjK8m3/+c9/zA+LBtzJGHT/7W9/8wpiZs6caU5AOA/IdF+lp6dbX3zxhbn966+/mg/6o48+6plGH9MgaufOnVaPHj38Bt2bN282XyB6wGkfHK5cubLOg79Qlu/vgFFfRzIeLOg+1IMp+zOzdetW86V9/vnne6YpLS01J7L0B9sO6jQw1+DK6eabb7YWL15sPoOBAuOLLrrI6tOnj+d7oaKiotaJOH/qmneo65gMiouLzYkn/Xwp3be33nqrlZ+fbwIe29ixY80JUT3Atr+f9XOg35u2p59+2nr33XetRYsWhRz06v7U+axduzbodNFafiLR3yXdBuXl5Z6TVvrbowdmTkceeaR1wgknmM+TfWKxTZs21q5duzzTPPDAA9aXX35pvf76636Dbn/086QHdHVNG8rybSNHjrT++Mc/JmXQrZ8J/S3SYxml2/WSSy4x29h5Yvjss8823116YkppAKcnKtetW+eZRuejgffs2bP9Bt3+6HtAj5P87RenUJZf33knIt0+eqxh0+MUPdbV/WN77733TLD71VdfmdtLliwxJzMmTZrkmWbOnDnWE088YbahnkAOFBg7rVixwizrxRdfDDpdKPMOZR2TxUcffWS2h31stGXLFnPs8fvf/94zjX4+9CTGH/7wB3NbP8Mnn3yyNWTIEK953XjjjdbPP/9svvf8Bb2aTNLPsP7WOeMnPZYtKioKuI6RWn4oCLrjlAa4zg+wnk3VA3Gns846y/yA+xMo6L7yyitNljvcM3KhLl9/0PSg/ocffrBGjRqVlEG3P3pGbvz48V4HVHr23emaa64J+EEPFHTffffd5qBNDzLDEe7y1b333mvl5eV5DjCS3X333WeyozYN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AAAIugEAQCDTp0+XVatWeW6/++67snbtWjYYAABNjEw3AAAJ4IYbbpC5c+d6bl955ZXy9ddfN+k6AQAAgm4AABLSyJEjpUePHk29GgAAJL30pN8CAADEoQ0bNsj8+fOla9eucsghh9R6/NRTT5UuXbp4bs+cOVN27twpKSkp5v6BAwdKbm5uI681AADJh6AbAIA4M23aNLn44ovl0EMPlZqaGqmurpbdu3d7TaPNy5944gnp3r27uf3ZZ59JQUGBmX7ZsmWyefNmee+992TIkCFN9CoAAEgO9OkGACCOFBcXy7XXXit//vOfZd68eabftma1t23bFvR5EydOlDfeeEOmTp0qCxculEsuuUT+8Ic/NNp6AwCQrAi6AQCII5qx1qy2Fk6z3XrrrZKaWvdP+urVq00z8zfffFNycnLku+++M1lyAAAQPTQvBwAgjugwYJ06dZKsrCzPfc2bN5d27doFfI5lWXLFFVeYLPfQoUOlTZs2UlRUJJWVlaaft94GAADRQdANAEAc0QBZA2XfoNr3Pqcvv/xSXnnlFVmxYoUpvKZmzZolH3/8sXkuAACIHpqXAwAQRw477DDTr3vOnDme+z766CMpLy8P+JzCwkLJy8uTzp07e+576623or6uAACATDcAAHGlT58+cs0118jo0aPl9ttvN9XIH3vsMWnWrFnA5xxzzDGm7/aFF14oJ510ksl8a+VyAAAQfWS6AQCIMxpk//Wvf5XFixebvtmffvqpXH755dKrVy/PNCNHjpQePXqYvzt06CDffPONGZ977ty50r9/f5k9e7ace+65Xn3DAQBA5KVYdOYCAAAAACAqyHQDAAAAABAlBN0AAAAAAEQJQTcAAAAAAFFC0A0AAAAAQJQQdAMAAAAAECUE3QAAAAAARAlBNwAAAAAAUULQDQAAAABAlBB0AwAAAAAQJQTdAAAAAABECUE3AAAAAABRQtANAAAAAIBEx/8Dq3qON/4nCN4AAAAASUVORK5CYII="/>
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=c27019a2">
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=17f4cf00">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="10.-Evaluaci%C3%B3n-contra-tu-etiquetado-manual-(hacer-despu%C3%A9s-de-etiquetar)">10. Evaluación contra tu etiquetado manual (hacer después de etiquetar)<a class="anchor-link" href="#10.-Evaluaci%C3%B3n-contra-tu-etiquetado-manual-(hacer-despu%C3%A9s-de-etiquetar)">¶</a></h2><p>Cuando termines de llenar <code>muestra_para_etiquetar.csv</code> (guárdalo como CSV), esta celda compara tus etiquetas con las de las reglas y calcula precisión, sensibilidad y <strong>F1</strong> por clase: la métrica de tu hipótesis (≥ 80 %).</p>
+<h2 id="8.-Salida-en-Parquet,-verificaci%C3%B3n-y-cierre-de-sesi%C3%B3n">8. Salida en Parquet, verificación y cierre de sesión<a class="anchor-link" href="#8.-Salida-en-Parquet,-verificaci%C3%B3n-y-cierre-de-sesi%C3%B3n">¶</a></h2><p>Convertimos el producto de datos filtrado a pandas para guardarlo en formato Parquet con compresión <code>snappy</code>, verificamos la lectura y liberamos los recursos de Spark.</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=fd472178">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=08f07114">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [10]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [23]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">classification_report</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># ============================================================</span>
+<span class="c1"># 8. GUARDADO EN PARQUET Y CIERRE DE SPARK</span>
+<span class="c1"># ============================================================</span>
+<span class="n">dataset_preparado_pd</span> <span class="o">=</span> <span class="n">dataset_preparado</span><span class="o">.</span><span class="n">toPandas</span><span class="p">()</span>
+<span class="n">dataset_preparado_pd</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span>
+    <span class="n">RUTA_OUT</span><span class="p">,</span>
+    <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">engine</span><span class="o">=</span><span class="s2">"pyarrow"</span><span class="p">,</span>
+    <span class="n">compression</span><span class="o">=</span><span class="s2">"snappy"</span><span class="p">,</span>
+    <span class="n">coerce_timestamps</span><span class="o">=</span><span class="s2">"us"</span><span class="p">,</span>
+    <span class="n">allow_truncated_timestamps</span><span class="o">=</span><span class="kc">True</span>
+<span class="p">)</span>
 
-<span class="n">manual</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">MUESTRA</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="p">{</span><span class="s2">"tweet_id"</span><span class="p">:</span> <span class="nb">str</span><span class="p">})</span>
-<span class="n">clave</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">CLAVE</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="p">{</span><span class="s2">"tweet_id"</span><span class="p">:</span> <span class="nb">str</span><span class="p">})</span>
-<span class="n">m</span> <span class="o">=</span> <span class="n">manual</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">clave</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="s2">"tweet_id"</span><span class="p">)</span>
-<span class="n">m</span> <span class="o">=</span> <span class="n">m</span><span class="p">[</span><span class="n">m</span><span class="p">[</span><span class="s2">"intencion_manual"</span><span class="p">]</span><span class="o">.</span><span class="n">notna</span><span class="p">()</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">m</span><span class="p">[</span><span class="s2">"intencion_manual"</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">""</span><span class="p">)]</span>
+<span class="n">df_verificacion</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">RUTA_OUT</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Ruta de salida:"</span><span class="p">,</span> <span class="n">RUTA_OUT</span><span class="o">.</span><span class="n">resolve</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Registros enviados:"</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataset_preparado_pd</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Registros recuperados:"</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">df_verificacion</span><span class="p">))</span>
 
-<span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">"Aún no hay etiquetas manuales."</span><span class="p">)</span>
-<span class="k">else</span><span class="p">:</span>
-    <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">"intencion"</span><span class="p">,</span> <span class="s2">"categoria"</span><span class="p">,</span> <span class="s2">"urgencia"</span><span class="p">]:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">=== </span><span class="si">{</span><span class="n">dim</span><span class="si">}</span><span class="s2"> ==="</span><span class="p">)</span>
-        <span class="nb">print</span><span class="p">(</span><span class="n">classification_report</span><span class="p">(</span><span class="n">m</span><span class="p">[</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">dim</span><span class="si">}</span><span class="s2">_manual"</span><span class="p">],</span> <span class="n">m</span><span class="p">[</span><span class="n">dim</span><span class="p">],</span> <span class="n">zero_division</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+<span class="n">dataset_preparado</span><span class="o">.</span><span class="n">unpersist</span><span class="p">(</span><span class="n">blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">spark</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"SparkSession detenida."</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -9088,7 +8629,10 @@ pagos_facturacion          1449  0.023
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Aún no hay etiquetas manuales.
+<pre>Ruta de salida: C:\Users\julia\OneDrive\Escritorio\MCD\Tesis\proyecto_investigacion\data\processed\apple_support_filtrado.parquet
+Registros enviados: 232973
+Registros recuperados: 232973
+SparkSession detenida.
 </pre>
 </div>
 </div>
